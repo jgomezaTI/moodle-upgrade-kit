@@ -2,7 +2,7 @@ schema_version: "1.0"
 workflow:
   id: moodle-rollback
   name: Moodle Rollback
-  description: Explicitly gated rollback workflow.
+  description: Explicitly gated rollback workflow with post-restore validation.
   inputs:
     config:
       type: string
@@ -13,19 +13,46 @@ workflow:
   steps:
     - id: rollback-review
       type: gate
-      message: "Confirm the exact backup set and restoration plan before rollback."
+      message: "Confirm the exact verified backup set and explicit restoration commands before rollback."
       options: [approve, reject]
       on_reject: abort
+
     - id: rollback
       type: command
       command: speckit.moodle.rollback
       input:
         args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --approved"
+
+    - id: post-rollback-inventory
+      type: command
+      command: speckit.moodle.inventory
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --phase after"
+
+    - id: post-rollback-endpoints
+      type: command
+      command: speckit.moodle.endpoints
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --phase after"
+
+    - id: post-rollback-logs
+      type: command
+      command: speckit.moodle.logs
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --phase after"
+
+    - id: post-rollback-database
+      type: command
+      command: speckit.moodle.database
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --phase after"
+
     - id: validate
       type: command
       command: speckit.moodle.validate
       input:
         args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --mode rollback"
+
     - id: document
       type: command
       command: speckit.moodle.document
