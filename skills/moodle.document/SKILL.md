@@ -1,49 +1,45 @@
 ---
 name: moodle.document
-description: Generate a technical evidence report and synchronize a human-readable upgrade summary to the configured Google Drive destination.
+description: Generate a redacted local evidence report and expose external documentation synchronization status without losing technical evidence.
 effect: read/write artifacts
-version: 0.1.0
+version: 0.2.0
 ---
 
 # moodle.document
 
 ## Purpose
 
-Generate a technical evidence report and synchronize a human-readable upgrade summary to the configured Google Drive destination.
-
-## Effect
-
-`read/write artifacts`
+Summarize structured run evidence into a local technical report. External synchronization is adapter-owned and must never replace or erase the local evidence trail.
 
 ## Inputs
 
 - Run evidence directory
-- Documentation configuration
-- Drive adapter/connector
+- Documentation/redaction configuration
+- Optional external documentation provider configuration
 
 ## Outputs
 
-- `final-report.md`
-- Updated/created Google Drive report
+- `runs/<run-id>/final-report.md`
+- `runs/<run-id>/document-result.json`
+- External synchronization status when a provider is configured
 
 ## Procedure
 
-1. Load only structured run evidence and bounded approved excerpts.
-2. Redact configured sensitive patterns.
-3. Summarize result, blockers, warnings, commands, timestamps and remediation.
-4. Link technical findings to stable check IDs.
-5. Do not rewrite a failed check as success.
-6. If Drive synchronization fails, keep the local final report and mark sync as failed rather than losing technical evidence.
+1. Read only the fixed structured evidence artifacts produced by the critical path.
+2. Derive an overall state from validation/upgrade/rollback evidence without rewriting failures as success.
+3. Aggregate stable finding IDs and summaries.
+4. Redact default credential patterns plus configured redaction patterns.
+5. Always preserve the local Markdown report.
+6. When an external provider such as Google Drive is configured but no authenticated adapter is available, record `external-adapter-required` rather than pretending synchronization completed.
+7. A synchronization failure/pending adapter may warn, but must not destroy local technical evidence.
 
 ## Blocking conditions
 
-- Evidence contains unredacted secrets
-- Report would claim completion despite failed validation
+- A report would expose unredacted secrets
+- A report would claim acceptance contrary to validation evidence
 
 ## Universal rules
 
-- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
-- Preserve the run ID in every generated artifact.
-- Distinguish `critical`, `warning` and `info` findings.
-- Do not claim a check passed if it did not execute.
-- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+- Never embed credentials in reports.
+- Local structured evidence remains authoritative.
+- External publishing and authentication must be explicit adapter behavior.
