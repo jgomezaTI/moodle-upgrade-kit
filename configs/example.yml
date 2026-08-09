@@ -8,11 +8,11 @@ moodle:
   moodledata: /var/www/example/moodledata
   base_url: https://moodle.example.invalid
   target_version: "5.0"
-  maintenance_mode_command: "php admin/cli/maintenance.php --enable"
-  maintenance_off_command: "php admin/cli/maintenance.php --disable"
-  upgrade_command: "php admin/cli/upgrade.php --non-interactive"
-  purge_caches_command: "php admin/cli/purge_caches.php"
-  cron_command: "php admin/cli/cron.php"
+  maintenance_mode_command: ["php", "admin/cli/maintenance.php", "--enable"]
+  maintenance_off_command: ["php", "admin/cli/maintenance.php", "--disable"]
+  upgrade_command: ["php", "admin/cli/upgrade.php", "--non-interactive"]
+  purge_caches_command: ["php", "admin/cli/purge_caches.php"]
+  cron_command: ["php", "admin/cli/cron.php"]
 
 safety:
   allow_mutation: false
@@ -22,19 +22,26 @@ safety:
   require_human_gate: true
   max_backup_age_hours: 24
 
+inventory:
+  min_free_gb: 5
+
 endpoints:
   - id: login
     method: GET
     path: /login/index.php
     expected_status: 200
+    severity: critical
     timeout_seconds: 15
   - id: homepage
     method: GET
     path: /
     expected_status: 200
+    severity: critical
     timeout_seconds: 15
 
 logs:
+  required: false
+  fail_baseline_on_critical: false
   files:
     - /var/log/nginx/error.log
     - /var/log/php/error.log
@@ -56,8 +63,19 @@ plugins:
     - blocks
     - mod
     - auth
+  custom_paths: []
+  compatibility: {}
   ignore:
     - mod/forum
+  # Optional Git reference containing a known-clean core baseline.
+  core_reference_ref: null
+
+custom_code:
+  paths: []
+  auto_detect_top_level: true
+  max_files_per_path: 50000
+  scan_max_files_per_path: 20000
+  scan_max_bytes_per_file: 1000000
 
 backup:
   paths:
@@ -66,28 +84,62 @@ backup:
     - database
     - code
     - moodledata
+  max_age_hours: 24
+  checksum: false
+  components:
+    database:
+      globs:
+        - "database*.sql"
+        - "database*.sql.gz"
+    code:
+      globs:
+        - "code*.tar.gz"
+        - "code*.tgz"
+    moodledata:
+      globs:
+        - "moodledata*.tar.gz"
+        - "moodledata*.tgz"
 
 database:
   driver: mysql
-  # Do not store passwords here. Use environment variables or an approved secret provider.
+  prefix: mdl_
+  # Optional Docker DB container. The database client still receives credentials
+  # only through the environment variables below; secrets are never stored here.
+  runtime_container: null
   connection_env:
     host: MOODLE_DB_HOST
     port: MOODLE_DB_PORT
     database: MOODLE_DB_NAME
     user: MOODLE_DB_USER
     password: MOODLE_DB_PASSWORD
+  max_sample_rows: 20
+  timeout_seconds: 30
   checks:
     - id: duplicate_emails
       severity: critical
+      expect: empty
       sql_file: sql/checks/duplicate_emails.sql
     - id: failed_scheduled_tasks
       severity: warning
+      expect: empty
       sql_file: sql/checks/failed_scheduled_tasks.sql
+
+upgrade:
+  # Mandatory before an executable upgrade. Use an argv list or a dedicated
+  # reviewed script; never place shell operators or credentials here.
+  code_transition_command: null
+  run_cron_after: true
+
+rollback:
+  # Deliberately empty in the generic example. Rollback never infers restore
+  # commands from backup filenames; each environment must define them explicitly.
+  commands: []
 
 documentation:
   provider: google-drive
   folder_id: null
   document_id: null
+  require_sync: false
   include_raw_logs: false
   redact_patterns:
     - "password"
