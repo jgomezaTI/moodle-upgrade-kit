@@ -1,49 +1,48 @@
 ---
 name: moodle.backup
-description: Verify that required backup components exist, are recent enough, and have enough metadata to support rollback planning.
+description: Verify explicit backup component identity, accessibility and freshness before any mutating upgrade or rollback step.
 effect: read-only
-version: 0.1.0
+version: 0.2.0
 ---
 
 # moodle.backup
 
 ## Purpose
 
-Verify that required backup components exist, are recent enough, and have enough metadata to support rollback planning.
-
-## Effect
-
-`read-only`
+Prove that the configured rollback prerequisites exist. File existence alone is insufficient: required components need explicit identity rules and freshness evidence.
 
 ## Inputs
 
-- Backup paths
-- Required components
-- Maximum age
+- Backup root directories
+- Required component names
+- Explicit per-component glob rules
+- Maximum backup age
+- Optional file checksum policy
 
 ## Outputs
 
-- `backup.json`
-- Pass/block status
+- `runs/<run-id>/backup.json`
+- Selected candidate metadata for every required component
+- Pass/block summary
 
 ## Procedure
 
-1. Enumerate configured backup locations without modifying them.
-2. Identify database, code and moodledata components as configured.
-3. Check timestamps against the maximum allowed age.
-4. Capture sizes/checksums when practical.
-5. Treat “file exists” as insufficient when required component identity or age cannot be proven.
+1. Verify configured backup roots are accessible directories.
+2. Require an explicit identity rule for every required component (for example database/code/moodledata globs).
+3. Resolve matching candidates only inside configured roots.
+4. Select the newest candidate and calculate age against policy.
+5. Optionally compute SHA-256 for selected files when configured.
+6. Mark the backup set verified only when every required component is identified and within freshness policy.
 
 ## Blocking conditions
 
-- Missing required component
-- Backup older than policy
-- Backup location inaccessible
+- Backup root inaccessible
+- Required component has no identity rule
+- No candidate matches a required component
+- Selected required component is older than policy
 
 ## Universal rules
 
-- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
-- Preserve the run ID in every generated artifact.
-- Distinguish `critical`, `warning` and `info` findings.
-- Do not claim a check passed if it did not execute.
-- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+- Read-only only; this capability does not create backups.
+- Never infer component identity solely from an arbitrary filename.
+- Upgrade and rollback must consume verified backup evidence rather than re-assuming backup state.
