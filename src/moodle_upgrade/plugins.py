@@ -9,6 +9,8 @@ from typing import Any, Iterable
 
 DEFAULT_EXTENSIONS = {".php", ".inc", ".sql", ".js", ".mustache"}
 DEFAULT_EXCLUDE_DIRS = {".git", "vendor", "node_modules", ".venv", "moodledata"}
+PHP_SOURCE_EXTENSIONS = (".php", ".inc")
+SQL_AWARE_EXTENSIONS = (".php", ".inc", ".sql")
 
 
 @dataclass
@@ -21,15 +23,86 @@ class Finding:
 
 
 RISK_PATTERNS: tuple[dict[str, Any], ...] = (
-    {"id": "php_mysql_extension_removed", "severity": "critical", "regex": r"\bmysql_(?:query|connect|pconnect|select_db|real_escape_string|fetch_[a-z_]+)\s*\(", "min_target": "4.1", "message": "Legacy mysql_* API is removed from modern PHP."},
-    {"id": "php_ereg_removed", "severity": "critical", "regex": r"\b(?:ereg|eregi|split|spliti)\s*\(", "min_target": "4.1", "message": "Legacy regex/string API is removed from modern PHP."},
-    {"id": "php_each_removed", "severity": "warning", "regex": r"\beach\s*\(", "min_target": "4.1", "message": "each() is incompatible with PHP 8 and should be migrated."},
-    {"id": "php_create_function_removed", "severity": "warning", "regex": r"\bcreate_function\s*\(", "min_target": "4.1", "message": "create_function() is incompatible with PHP 8 and should be migrated."},
-    {"id": "moodle_41_cron_run_single_task_removed", "severity": "critical", "regex": r"\bcron_run_single_task\s*\(", "min_target": "4.1", "message": "cron_run_single_task() was finally deprecated for Moodle 4.1 and requires migration."},
-    {"id": "moodle_41_get_module_metadata_removed", "severity": "critical", "regex": r"\bget_module_metadata\s*\(", "min_target": "4.1", "message": "get_module_metadata() was finally deprecated for Moodle 4.1 and requires migration."},
-    {"id": "moodle_41_admin_setting_managelicenses_removed", "severity": "critical", "regex": r"\badmin_setting_managelicenses\b", "min_target": "4.1", "message": "admin_setting_managelicenses was finally deprecated for Moodle 4.1 and requires migration."},
-    {"id": "hardcoded_mdl_prefix", "severity": "warning", "regex": r"\bmdl_[a-zA-Z0-9_]+\b", "min_target": "3.9", "message": "Hard-coded mdl_ table prefix couples code to one database prefix."},
-    {"id": "legacy_user_contact_column", "severity": "warning", "regex": r"(?:\bmdl_user\b|\buser\b|\bu\b)\s*\.\s*(?:icq|skype|yahoo|aim|msn)\b|\b(?:icq|skype|yahoo|aim|msn)\b", "min_target": "3.11", "message": "Legacy user contact fields were migrated/removed around Moodle 3.11 and require schema review."},
+    {
+        "id": "php_mysql_extension_removed",
+        "severity": "critical",
+        "regex": r"\bmysql_(?:query|connect|pconnect|select_db|real_escape_string|fetch_[a-z_]+)\s*\(",
+        "min_target": "4.1",
+        "extensions": PHP_SOURCE_EXTENSIONS,
+        "message": "Legacy mysql_* API is removed from modern PHP.",
+    },
+    {
+        "id": "php_ereg_removed",
+        "severity": "critical",
+        "regex": r"\b(?:ereg|eregi)\s*\(",
+        "min_target": "4.1",
+        "extensions": PHP_SOURCE_EXTENSIONS,
+        "message": "ereg()/eregi() are removed from modern PHP.",
+    },
+    {
+        "id": "php_split_removed",
+        "severity": "critical",
+        "regex": r"\b(?:split|spliti)\s*\(",
+        "min_target": "4.1",
+        "extensions": PHP_SOURCE_EXTENSIONS,
+        "message": "split()/spliti() are removed from modern PHP.",
+    },
+    {
+        "id": "php_each_removed",
+        "severity": "warning",
+        "regex": r"\beach\s*\(",
+        "min_target": "4.1",
+        "extensions": PHP_SOURCE_EXTENSIONS,
+        "message": "each() is incompatible with PHP 8 and should be migrated.",
+    },
+    {
+        "id": "php_create_function_removed",
+        "severity": "warning",
+        "regex": r"\bcreate_function\s*\(",
+        "min_target": "4.1",
+        "extensions": PHP_SOURCE_EXTENSIONS,
+        "message": "create_function() is incompatible with PHP 8 and should be migrated.",
+    },
+    {
+        "id": "moodle_41_cron_run_single_task_removed",
+        "severity": "critical",
+        "regex": r"\bcron_run_single_task\s*\(",
+        "min_target": "4.1",
+        "extensions": PHP_SOURCE_EXTENSIONS,
+        "message": "cron_run_single_task() was finally deprecated for Moodle 4.1 and requires migration.",
+    },
+    {
+        "id": "moodle_41_get_module_metadata_removed",
+        "severity": "critical",
+        "regex": r"\bget_module_metadata\s*\(",
+        "min_target": "4.1",
+        "extensions": PHP_SOURCE_EXTENSIONS,
+        "message": "get_module_metadata() was finally deprecated for Moodle 4.1 and requires migration.",
+    },
+    {
+        "id": "moodle_41_admin_setting_managelicenses_removed",
+        "severity": "critical",
+        "regex": r"\badmin_setting_managelicenses\b",
+        "min_target": "4.1",
+        "extensions": PHP_SOURCE_EXTENSIONS,
+        "message": "admin_setting_managelicenses was finally deprecated for Moodle 4.1 and requires migration.",
+    },
+    {
+        "id": "hardcoded_mdl_prefix",
+        "severity": "warning",
+        "regex": r"\bmdl_[a-zA-Z0-9_]+\b",
+        "min_target": "3.9",
+        "extensions": SQL_AWARE_EXTENSIONS,
+        "message": "Hard-coded mdl_ table prefix couples code to one database prefix.",
+    },
+    {
+        "id": "legacy_user_contact_column",
+        "severity": "warning",
+        "regex": r"(?:\bmdl_user\b|\buser\b|\bu\b)\s*\.\s*(?:icq|skype|yahoo|aim|msn)\b|\b(?:icq|skype|yahoo|aim|msn)\b",
+        "min_target": "3.11",
+        "extensions": SQL_AWARE_EXTENSIONS,
+        "message": "Legacy user contact fields were migrated/removed around Moodle 3.11 and require schema review.",
+    },
 )
 
 
@@ -79,9 +152,13 @@ def _scan_path(root: Path, display_root: Path, target_version: str, max_files: i
             truncated_files += 1
         text = raw.decode("utf-8", errors="ignore")
         rel = str(file_path.relative_to(display_root)) if file_path.is_relative_to(display_root) else str(file_path)
+        suffix = file_path.suffix.lower()
         for lineno, line in enumerate(text.splitlines(), start=1):
             for pattern in patterns:
                 if not _at_least(target_version, pattern["min_target"]):
+                    continue
+                allowed_extensions = pattern.get("extensions")
+                if allowed_extensions and suffix not in allowed_extensions:
                     continue
                 if re.search(pattern["regex"], line, flags=re.IGNORECASE):
                     hits.append({"id": pattern["id"], "severity": pattern["severity"], "path": rel, "line": lineno, "message": pattern["message"]})
