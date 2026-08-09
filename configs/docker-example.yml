@@ -1,0 +1,40 @@
+project:
+  name: example-moodle-docker
+  environment: staging
+  timezone: America/Santiago
+
+moodle:
+  # Host/WSL-visible bind mount used for source, Git, plugins and disk inspection.
+  root: /home/user/projects/moodle/public_html
+  moodledata: /home/user/projects/moodle/public_html/moodledata
+  base_url: https://moodle.example.invalid
+  target_version: "4.1"
+  cron_command: "php admin/cli/cron.php"
+
+runtime:
+  type: docker
+  container: moodle-php-1
+  moodle_root: /var/www/html
+  moodledata: /var/www/moodledata
+
+safety:
+  allow_mutation: false
+  require_environment: staging
+  require_clean_git: true
+  require_backup_check: true
+  require_human_gate: true
+  max_backup_age_hours: 24
+
+inventory:
+  min_free_gb: 5
+
+plugins:
+  custom_roots:
+    - local
+    - report
+    - blocks
+    - mod
+    - auth
+
+backup:
+  paths: []
