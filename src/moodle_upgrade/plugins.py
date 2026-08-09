@@ -102,6 +102,50 @@ def _git_diff_names(repo_root: Path, reference: str, moodle_root: Path) -> list[
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
+def _scan_path_covers(parent: Path, child: Path) -> bool:
+    if parent == child:
+        return True
+    if not parent.is_dir():
+        return False
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _deduplicate_scan_targets(scan_targets: list[tuple[str, Path]]) -> tuple[list[tuple[str, Path]], list[dict[str, str]]]:
+    """Return minimal non-overlapping scan roots plus evidence for covered paths.
+
+    Parents are considered before descendants regardless of configuration order, so
+    configuring both ../batch and ../batch/edx never scans the edx tree twice.
+    """
+    normalized = [(index, label, path.resolve()) for index, (label, path) in enumerate(scan_targets)]
+    ordered = sorted(normalized, key=lambda item: (len(item[2].parts), item[0]))
+    selected: list[tuple[int, str, Path]] = []
+    covered: list[tuple[int, dict[str, str]]] = []
+
+    for index, label, resolved in ordered:
+        covering = next(
+            ((selected_label, selected_path) for _, selected_label, selected_path in selected if _scan_path_covers(selected_path, resolved)),
+            None,
+        )
+        if covering:
+            covering_label, covering_path = covering
+            covered.append((index, {
+                "path": label,
+                "resolved_path": str(resolved),
+                "covered_by": covering_label,
+                "covered_by_resolved_path": str(covering_path),
+            }))
+            continue
+        selected.append((index, label, resolved))
+
+    selected.sort(key=lambda item: item[0])
+    covered.sort(key=lambda item: item[0])
+    return [(label, path) for _, label, path in selected], [item for _, item in covered]
+
+
 def analyze_plugins(config: dict[str, Any], inventory: dict[str, Any]) -> dict[str, Any]:
     target = config.get("moodle", {}).get("target_version") or inventory.get("identity", {}).get("target_version")
     root = Path(config["moodle"]["root"]).expanduser().resolve()
@@ -152,14 +196,11 @@ def analyze_plugins(config: dict[str, Any], inventory: dict[str, Any]) -> dict[s
         if candidate.exists():
             scan_targets.append((str(path), candidate))
 
+    scan_targets, covered_scan_paths = _deduplicate_scan_targets(scan_targets)
+
     all_hits: list[dict[str, Any]] = []
     scan_summaries: list[dict[str, Any]] = []
-    seen: set[Path] = set()
-    for label, target_path in scan_targets:
-        resolved = target_path.resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
+    for label, resolved in scan_targets:
         hits, summary = _scan_path(resolved, resolved if resolved.is_dir() else resolved.parent, str(target), max_files, max_bytes, RISK_PATTERNS)
         for hit in hits:
             hit["scope"] = label
@@ -180,11 +221,12 @@ def analyze_plugins(config: dict[str, Any], inventory: dict[str, Any]) -> dict[s
 
     counts = Counter(f.severity for f in findings)
     return {
-        "target_version": target, "plugins": plugins, "custom_code_scans": scan_summaries, "risk_hits": all_hits,
+        "target_version": target, "plugins": plugins, "custom_code_scans": scan_summaries, "covered_scan_paths": covered_scan_paths, "risk_hits": all_hits,
         "core_reference_ref": core_ref, "core_modifications": core_modifications, "manual_review": review,
         "findings": [asdict(f) for f in findings],
         "summary": {
             "critical": counts["critical"], "warning": counts["warning"], "info": counts["info"],
-            "plugin_count": len(plugins), "risk_hit_count": len(all_hits), "review_count": len(review), "ready": counts["critical"] == 0,
+            "plugin_count": len(plugins), "risk_hit_count": len(all_hits), "review_count": len(review),
+            "scan_root_count": len(scan_summaries), "covered_scan_path_count": len(covered_scan_paths), "ready": counts["critical"] == 0,
         },
     }
