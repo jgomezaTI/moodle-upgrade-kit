@@ -1,49 +1,55 @@
 ---
 name: moodle.compatibility
-description: Assess whether the current platform and code are compatible with the configured target Moodle version.
+description: Deterministically assess whether inventory evidence satisfies the configured target Moodle platform and upgrade-path requirements.
 effect: read-only
-version: 0.1.0
+version: 0.2.0
 ---
 
 # moodle.compatibility
 
 ## Purpose
 
-Assess whether the current platform and code are compatible with the configured target Moodle version.
-
-## Effect
-
-`read-only`
+Turn `moodle.inventory` facts into an explicit compatibility verdict for the target Moodle branch. Do not re-probe the server when inventory already contains the evidence.
 
 ## Inputs
 
-- Inventory
-- Target Moodle version
-- Plugin/custom-code inventory
+- `inventory-before.json` / `inventory.json`
+- Configured target Moodle version
 
 ## Outputs
 
-- `compatibility.json`
-- Blocking requirements and manual review list
+- `runs/<run-id>/compatibility.json`
+- Deterministic checks, blockers/warnings and a manual-review list
 
 ## Procedure
 
-1. Compare PHP and database versions against a maintained target-version matrix.
-2. Identify removed/deprecated APIs relevant to custom code when evidence is available.
-3. Flag third-party plugins without a declared compatible version.
-4. Flag core modifications and unmanaged vendor changes.
-5. Distinguish proven incompatibility from unknown compatibility; unknown is never silently treated as compatible.
+1. Resolve the target branch against the maintained requirement matrix.
+2. Verify the current Moodle release satisfies the target's minimum upgrade-source version.
+3. Verify PHP minimum/maximum and also flag when the current/source Moodle is already running below its own supported PHP minimum.
+4. Verify required PHP extensions and surface recommended extension gaps as warnings.
+5. Verify applicable PHP settings such as `max_input_vars` and 64-bit PHP requirements when the target needs them.
+6. Verify supported database driver/version and target-specific prefix constraints when applicable.
+7. Surface deployment changes that require planning, such as Moodle 5.1+ public web root.
+8. Pass plugins and arbitrary custom-code targets to manual review rather than silently treating unknown compatibility as success.
+
+## Classification rules
+
+- Proven requirement violation: `critical`.
+- Required evidence that is unknown: `critical` when it prevents proving target safety.
+- Recommended but non-blocking platform guidance: `warning`.
+- Plugin/custom-code compatibility is not inferred from directory existence; deeper source/plugin review belongs to `moodle.plugins`.
 
 ## Blocking conditions
 
-- Unsupported PHP/DB version
-- Known incompatible plugin
-- Required compatibility evidence is unknown for a critical custom integration
+- Unknown target requirement matrix entry
+- Unsupported upgrade source
+- Unsupported PHP or required PHP extension/settings
+- Unsupported/unknown database requirement needed by the target
+- Configured critical custom code cannot be inventoried
 
 ## Universal rules
 
-- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
-- Preserve the run ID in every generated artifact.
-- Distinguish `critical`, `warning` and `info` findings.
-- Do not claim a check passed if it did not execute.
-- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+- Read-only only; consume structured inventory evidence.
+- Never persist secrets.
+- Preserve the run ID and stable finding/check IDs.
+- Unknown is never silently treated as compatible.
