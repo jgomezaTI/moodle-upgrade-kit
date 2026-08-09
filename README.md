@@ -1,76 +1,162 @@
 # Moodle Upgrade Kit
 
-Moodle Upgrade Kit is a Spec Kit-inspired, auditable framework for planning, validating, executing, and documenting Moodle upgrades.
+Moodle Upgrade Kit is a Spec Kit-inspired, auditable framework for planning, validating, executing and documenting Moodle upgrades.
 
-The project deliberately separates **agent reasoning** from **deterministic execution**:
+The project separates **capability contracts** from **deterministic execution**:
 
-- `skills/` describes the contracts and safety rules for each Moodle capability.
-- `commands/` exposes those capabilities as Spec Kit extension commands.
-- `scripts/` contains deterministic, reviewable execution helpers.
-- `workflows/` chains the capabilities into a guarded upgrade process.
-- `configs/` contains environment-specific, non-secret configuration.
-- `runs/` is the local execution evidence area and is ignored by Git.
+- `skills/` defines behavior and safety boundaries.
+- `commands/` exposes Spec Kit extension commands.
+- `src/moodle_upgrade/` contains deterministic Python execution.
+- `workflows/` chains capabilities and human gates.
+- `configs/` contains non-secret environment configuration.
+- `runs/` contains local execution evidence and is ignored by Git.
 
-## Initial capabilities
+## Capabilities
 
-| Capability | Purpose | Default effect |
+| Capability | Purpose | Effect |
 |---|---|---|
-| `moodle.inventory` | Detect Moodle, PHP, database, Git, plugins, disk and cron context | Read-only |
-| `moodle.baseline` | Capture the functional state before an upgrade | Read-only |
-| `moodle.compatibility` | Evaluate target-version requirements and blockers | Read-only |
-| `moodle.plugins` | Inspect third-party/custom plugins and custom code | Read-only |
-| `moodle.endpoints` | Run configurable HTTP/API smoke checks | Read-only |
-| `moodle.logs` | Analyze Nginx/Apache, PHP, Moodle and cron logs | Read-only |
-| `moodle.database` | Run allow-listed pre/post validation queries | Read-only by default |
-| `moodle.backup` | Verify backup presence, freshness and restore metadata | Read-only |
-| `moodle.upgrade` | Execute a controlled Moodle upgrade | Destructive; gated |
-| `moodle.validate` | Compare baseline with the post-upgrade state | Read-only |
-| `moodle.rollback` | Execute an approved rollback procedure | Destructive; gated |
-| `moodle.document` | Produce evidence and synchronize a human-readable report | Read/write artifacts |
+| `moodle.inventory` | Capture Moodle/runtime/Git/plugin/custom-code/platform facts | Read-only |
+| `moodle.compatibility` | Evaluate target requirements and upgrade-path blockers | Read-only |
+| `moodle.plugins` | Scan plugins and arbitrary project code for upgrade risks | Read-only |
+| `moodle.baseline` | Capture pre-upgrade endpoint/DB/log/cron behavior | Read-only |
+| `moodle.endpoints` | Run configurable HTTP smoke checks | Read-only |
+| `moodle.logs` | Analyze configured log signatures | Read-only |
+| `moodle.database` | Execute allow-listed read-only validation SQL | Read-only |
+| `moodle.backup` | Verify explicit backup components and freshness | Read-only |
+| `moodle.upgrade` | Execute an exact configured upgrade after all gates pass | Destructive; gated |
+| `moodle.validate` | Compare post-change evidence against baseline | Read-only |
+| `moodle.rollback` | Execute an explicit restore procedure after rollback gates pass | Destructive; gated |
+| `moodle.document` | Produce a redacted local evidence report | Artifact write |
 
-## Core safety principles
+## Critical path
 
-1. Diagnostic skills are read-only.
-2. Secrets are never committed to the repository or run artifacts.
-3. `upgrade` and `rollback` require explicit human approval.
-4. No production mutation is allowed unless a fresh backup check passes.
-5. Every upgrade has a run ID and evidence directory.
-6. Every regression found during an upgrade should become a permanent test or validation check.
-7. Git is the technical source of truth; Google Drive is the human-readable documentation surface.
+```text
+inventory before
+→ compatibility
+→ plugins/custom code
+→ baseline
+→ backup verification
+→ human review gate
+→ upgrade
+→ inventory/endpoints/logs/database after
+→ validate
+→ human acceptance gate
+→ document
+```
+
+Rollback is separately gated and requires an explicit restore procedure:
+
+```text
+rollback review gate
+→ rollback
+→ inventory/endpoints/logs/database after
+→ validate --mode rollback
+→ document
+```
+
+## Safety model
+
+1. Read-only capabilities never mutate Moodle or the database.
+2. Secrets are never stored in configuration examples or run evidence.
+3. Database validation SQL is allow-listed and rejected when mutation cannot be ruled out.
+4. `safety.allow_mutation` is `false` by default.
+5. Upgrade requires compatible platform evidence, plugin/custom-code analysis without critical findings, a complete baseline, verified backups, clean Git when required, an allowed environment and explicit human approval.
+6. Rollback requires verified backups, an explicit environment-owned restore sequence and explicit human approval.
+7. Mutation commands use argv-safe execution; shell interpolation/control syntax and credential-bearing arguments are rejected.
+8. Command exit code zero is not acceptance. Post-change `moodle.validate` must pass.
+9. Every real regression should become a stable test or validation check.
+
+## Installation
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[test]'
+pytest
+```
+
+## Read-only validation flow
+
+Start with a local gitignored environment config under `configs/environments/*.local.yml`.
+
+```bash
+RUN_ID=UPG-2026-001
+CONFIG=configs/environments/example.local.yml
+
+muk inventory --config "$CONFIG" --run-id "$RUN_ID" --phase before
+muk compatibility --config "$CONFIG" --run-id "$RUN_ID"
+muk plugins --config "$CONFIG" --run-id "$RUN_ID"
+muk baseline --config "$CONFIG" --run-id "$RUN_ID"
+muk backup --config "$CONFIG" --run-id "$RUN_ID"
+```
+
+A compatibility blocker or missing backup evidence is expected to stop the critical path before mutation.
+
+Database check credentials, when checks are configured, are supplied through the environment-variable names declared under `database.connection_env`.
+
+## Mutating flow
+
+The generic example intentionally cannot mutate because:
+
+```yaml
+safety:
+  allow_mutation: false
+
+upgrade:
+  code_transition_command: null
+
+rollback:
+  commands: []
+```
+
+An environment owner must explicitly configure and review mutation commands and then enable mutation for an allowed environment. Even then, the CLI refuses to upgrade unless all machine-verifiable gates and `--approved` pass.
+
+After an approved upgrade, collect post-change evidence before validation:
+
+```bash
+muk inventory --config "$CONFIG" --run-id "$RUN_ID" --phase after
+muk endpoints --config "$CONFIG" --run-id "$RUN_ID" --phase after
+muk logs --config "$CONFIG" --run-id "$RUN_ID" --phase after
+muk database --config "$CONFIG" --run-id "$RUN_ID" --phase after
+muk validate --config "$CONFIG" --run-id "$RUN_ID" --mode upgrade
+muk document --config "$CONFIG" --run-id "$RUN_ID"
+```
+
+## Evidence
+
+A complete run can produce:
+
+```text
+runs/<run-id>/
+├── inventory-before.json
+├── compatibility.json
+├── plugins.json
+├── baseline-before.json
+├── endpoints-before.json
+├── logs-before.json
+├── database-before.json
+├── backup.json
+├── upgrade-plan.md
+├── upgrade-result.json
+├── inventory-after.json
+├── endpoints-after.json
+├── logs-after.json
+├── database-after.json
+├── validation.json
+├── rollback-plan.md
+├── rollback-result.json
+├── final-report.md
+└── document-result.json
+```
 
 ## Spec Kit alignment
 
-This repository is designed as a Spec Kit extension source. `extension.yml` declares the commands, and `workflows/moodle-upgrade/workflow.yml` provides an end-to-end workflow with human gates before mutation.
+`extension.yml` declares the 12 command contracts and `workflows/moodle-upgrade/workflow.yml` / `workflows/moodle-rollback/workflow.yml` describe the gated orchestration.
 
-Typical development flow:
+The repository itself remains the technical source of truth. `AGENTS.md` and `docs/PROJECT_CONTEXT.md` provide persistent handoff context for Codex/other coding agents.
 
-```bash
-specify init . --integration codex
-specify extension add moodle-upgrade --dev .
-specify workflow add workflows/moodle-upgrade --dev
-```
+## Current real validation target
 
-Then use the installed command/skill names exposed by the active Spec Kit integration.
+The first real target is the Enaex Spanish LMS under WSL + Docker, currently documented as Moodle `3.11.18` → `4.1`. The observed PHP runtime is `5.6.40`; `moodle.compatibility` is expected to classify that as a blocker before any mutation is possible.
 
-## Local CLI
-
-The repository also includes a small deterministic helper CLI:
-
-```bash
-python -m moodle_upgrade.cli validate-config --config configs/example.yml
-python -m moodle_upgrade.cli new-run --config configs/example.yml
-python -m moodle_upgrade.cli endpoints --config configs/example.yml --run-id UPG-2026-001
-python -m moodle_upgrade.cli compare --before runs/UPG-2026-001/baseline-before.json --after runs/UPG-2026-001/baseline-after.json
-```
-
-The CLI is intentionally conservative. It does **not** perform a Moodle upgrade by itself in this first version. Upgrade and rollback skills produce an approved execution plan and require a human gate before any server-side commands are run.
-
-## Repository status
-
-This is the initial bootstrap. The next milestones are:
-
-1. validate the framework against a non-production Moodle instance;
-2. add SSH execution adapters with strict allow-lists;
-3. integrate Google Drive document updates through a dedicated adapter;
-4. add Moodle-version compatibility matrices and plugin API checks;
-5. convert each real incident into a regression fixture.
+The next step is to run the **current read-only critical path** against that environment and turn any newly discovered defect into a regression test before enabling mutation.
