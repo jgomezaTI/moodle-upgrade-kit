@@ -1,47 +1,52 @@
 ---
 name: moodle.plugins
-description: Review third-party plugins, local plugins and custom code that may break during a Moodle upgrade.
+description: Review Moodle plugins and arbitrary project code for known upgrade risks while keeping uncertain compatibility explicit.
 effect: read-only
-version: 0.1.0
+version: 0.2.0
 ---
 
 # moodle.plugins
 
 ## Purpose
 
-Review third-party plugins, local plugins and custom code that may break during a Moodle upgrade.
-
-## Effect
-
-`read-only`
+Analyze the plugin/custom-code candidates discovered by inventory, including code outside standard Moodle plugin boundaries such as `portal_v3` and allowed `../...` project paths.
 
 ## Inputs
 
-- Moodle root
-- Configured custom roots/ignore list
+- Environment config
+- Inventory evidence
+- Optional declared plugin target compatibility
+- Optional known-clean Git core reference
 
 ## Outputs
 
-- `plugins.json`
-- Custom-code review candidates
+- `runs/<run-id>/plugins.json`
+- Plugin classifications, bounded source-scan findings and manual-review candidates
 
 ## Procedure
 
-1. Enumerate plugins by component/path and version metadata when available.
-2. Identify local/custom plugins and code living outside standard plugin boundaries.
-3. Detect uncommitted changes and direct core modifications where Git history can prove them.
-4. Search for configured high-risk API/table patterns without claiming compatibility from pattern absence alone.
-5. Produce a prioritized manual review list.
+1. Preserve inventory's conservative plugin classification; do not claim core status without evidence.
+2. Respect explicit ignore rules and declared target compatibility mappings.
+3. Scan custom plugins and configured arbitrary custom code within configured file/byte bounds.
+4. Search deterministic high-risk patterns for known PHP removals, target-specific Moodle deprecations and schema-coupling signals.
+5. Store finding ID, file path and line number, not source-code contents.
+6. Optionally compare the Moodle tree against a configured Git core reference and surface changed filenames for review.
+7. Keep custom/unclassified plugins on a manual-review list when target compatibility is not proven.
+
+## Safety
+
+- Read-only filesystem/Git inspection only.
+- Skip large generated/dependency trees such as `.git`, `vendor`, `node_modules`, `.venv` and moodledata.
+- Pattern absence is not proof of full compatibility.
+- A manual-review item may remain even when no known critical signature was found.
 
 ## Blocking conditions
 
-- Known direct core modification with no migration plan
-- Critical custom plugin cannot be inventoried
+- Configured custom code cannot be scanned/inventoried
+- A known critical compatibility signature is detected
 
 ## Universal rules
 
-- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
-- Preserve the run ID in every generated artifact.
-- Distinguish `critical`, `warning` and `info` findings.
-- Do not claim a check passed if it did not execute.
-- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+- Never persist secrets or full source excerpts.
+- Preserve stable finding IDs so real regressions can become permanent checks.
+- Keep known failures separate from unknown/manual review.
