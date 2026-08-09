@@ -1,49 +1,51 @@
 ---
 name: moodle.baseline
-description: Capture the pre-upgrade functional state so the same critical behavior can be compared after the upgrade.
+description: Capture the pre-upgrade functional state so post-change validation can compare the same checks like-for-like.
 effect: read-only
-version: 0.1.0
+version: 0.2.0
 ---
 
 # moodle.baseline
 
 ## Purpose
 
-Capture the pre-upgrade functional state so the same critical behavior can be compared after the upgrade.
-
-## Effect
-
-`read-only`
+Produce one pre-change baseline from proven inventory identity plus endpoint, database, log and cron evidence.
 
 ## Inputs
 
-- Inventory result
-- Configured endpoints
-- Configured DB checks
-- Configured log sources
+- Successful pre-change inventory evidence
+- Configured endpoint checks
+- Allow-listed database validation checks
+- Configured log files/patterns
 
 ## Outputs
 
-- `baseline-before.json` plus referenced component evidence
+- `runs/<run-id>/baseline-before.json`
+- `endpoints-before.json`
+- `database-before.json`
+- `logs-before.json`
 
 ## Procedure
 
-1. Require a successful inventory first.
-2. Run endpoint smoke checks.
-3. Run allow-listed database validation checks.
-4. Capture log error counts/patterns for the selected baseline window.
-5. Capture cron/scheduled-task status where available.
-6. Record timestamps and check definitions so post-upgrade comparison is like-for-like.
+1. Require proven Moodle identity and reject inventory criticals.
+2. Execute configured endpoint smoke checks and honor per-endpoint severity.
+3. Execute `moodle.database` read-only allow-listed checks.
+4. Capture bounded configured log signatures without mutating/rotating logs.
+5. Record cron CLI/configuration state from inventory without running cron.
+6. Persist the definitions used so post-change checks remain like-for-like.
+7. Preserve pre-existing log/database problems as baseline facts rather than automatically calling them regressions.
 
 ## Blocking conditions
 
-- A critical baseline check cannot execute
-- The baseline is missing instance identity
+- Missing Moodle identity
+- Inventory contains critical findings
+- Critical endpoint/database baseline check fails
+- A required log source cannot be read
+- Configured cron CLI is missing
 
 ## Universal rules
 
-- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
-- Preserve the run ID in every generated artifact.
-- Distinguish `critical`, `warning` and `info` findings.
-- Do not claim a check passed if it did not execute.
-- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+- Read-only only.
+- Never persist credentials.
+- A baseline is complete only when no critical baseline finding remains.
+- Do not convert pre-existing warnings into post-upgrade regressions unless their post state worsens.
