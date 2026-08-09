@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -98,6 +98,57 @@ def _plugins(root: Path, configured_roots: list[str]) -> list[dict[str, str]]:
     return results
 
 
+def _docker_runtime(runtime_cfg: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    container = runtime_cfg.get("container")
+    runtime_root = runtime_cfg.get("moodle_root")
+    runtime_moodledata = runtime_cfg.get("moodledata")
+
+    inspect = _run(["docker", "inspect", "-f", "{{.State.Running}}", str(container)])
+    running = inspect["ok"] and inspect["stdout"].strip().lower() == "true"
+
+    markers: dict[str, bool] = {}
+    if running and runtime_root:
+        base = PurePosixPath(str(runtime_root))
+        marker_specs = {
+            "version.php": ("-f", base / "version.php"),
+            "config.php": ("-f", base / "config.php"),
+            "admin/cli": ("-d", base / "admin" / "cli"),
+        }
+        for name, (flag, path) in marker_specs.items():
+            check = _run(["docker", "exec", str(container), "test", flag, str(path)])
+            markers[name] = check["ok"]
+
+    if running:
+        php = _run(["docker", "exec", str(container), "php", "-v"])
+        modules_result = _run(["docker", "exec", str(container), "php", "-m"])
+    else:
+        php = {"ok": False, "returncode": None, "stdout": "", "stderr": "Docker container is not running"}
+        modules_result = {"ok": False, "returncode": None, "stdout": "", "stderr": "Docker container is not running"}
+
+    runtime = {
+        "type": "docker",
+        "container": container,
+        "running": running,
+        "moodle_root": runtime_root,
+        "moodledata": runtime_moodledata,
+        "markers": markers,
+    }
+    modules = [line.strip() for line in modules_result["stdout"].splitlines() if line.strip()] if modules_result["ok"] else []
+    return runtime, php, modules
+
+
+def _runtime_platform(config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    runtime_cfg = config.get("runtime", {})
+    runtime_type = runtime_cfg.get("type", "local")
+    if runtime_type == "docker":
+        return _docker_runtime(runtime_cfg)
+
+    php = _run(["php", "-v"])
+    modules_result = _run(["php", "-m"]) if php["ok"] else {"ok": False, "stdout": ""}
+    modules = [line.strip() for line in modules_result.get("stdout", "").splitlines() if line.strip()] if modules_result.get("ok") else []
+    return {"type": "local"}, php, modules
+
+
 def collect_inventory(config: dict[str, Any]) -> dict[str, Any]:
     moodle_cfg = config["moodle"]
     root = Path(moodle_cfg["root"]).expanduser().resolve()
@@ -112,9 +163,15 @@ def collect_inventory(config: dict[str, Any]) -> dict[str, Any]:
     elif not all(marker_state.values()):
         findings.append(Finding("critical", "MOODLE_MARKERS_MISSING", "Configured root does not contain all expected Moodle markers."))
 
-    php = _run(["php", "-v"])
+    runtime, php, php_modules = _runtime_platform(config)
+    if runtime.get("type") == "docker":
+        if not runtime.get("running"):
+            findings.append(Finding("critical", "DOCKER_CONTAINER_UNAVAILABLE", f"Docker container is not running or accessible: {runtime.get('container')}"))
+        elif runtime.get("markers") and not all(runtime["markers"].values()):
+            findings.append(Finding("critical", "RUNTIME_MOODLE_MARKERS_MISSING", "Docker runtime does not contain all expected Moodle markers."))
+
     if not php["ok"]:
-        findings.append(Finding("critical", "PHP_UNAVAILABLE", "PHP CLI could not be executed."))
+        findings.append(Finding("critical", "PHP_UNAVAILABLE", "PHP CLI could not be executed in the configured runtime."))
 
     git = _git_state(root) if root.exists() else {"is_repo": False, "branch": None, "head": None, "dirty": None}
     if git.get("is_repo") and git.get("dirty"):
@@ -155,9 +212,11 @@ def collect_inventory(config: dict[str, Any]) -> dict[str, Any]:
             "moodle_version": _read_moodle_version(root) if root.exists() else {},
         },
         "platform": {
+            "runtime": runtime,
             "php": {
                 "available": php["ok"],
                 "version_line": php["stdout"].splitlines()[0] if php["stdout"] else None,
+                "modules": php_modules,
             },
             "git": git,
             "disk": disks,
