@@ -1,81 +1,60 @@
 ---
 name: moodle.inventory
-description: Detect and record the instance identity and operational prerequisites: Moodle version/root, PHP, DB type, Git state, installed plugins, non-core code, disk usage, cron and key paths.
+description: Detect and record instance identity and platform evidence needed by later upgrade checks without mutating Moodle.
 effect: read-only
-version: 0.3.1
+version: 0.4.0
 ---
 
 # moodle.inventory
 
 ## Purpose
 
-Detect and record the instance identity and operational prerequisites: Moodle version/root, PHP, database runtime metadata, Git state, installed plugins, non-core code, disk usage, cron and key paths.
-
-## Effect
-
-`read-only`
+Capture source/runtime identity and operational evidence for later capabilities. Inventory records facts; compatibility verdicts belong to `moodle.compatibility`.
 
 ## Inputs
 
 - Environment YAML config
-- Read access to Moodle root and relevant system commands
-- Optional Docker runtime target when Moodle executes inside a container
-- Optional explicit custom plugin paths and arbitrary custom code paths such as `portal_v3` or `../autonomina`
+- Moodle source root and optional moodledata
+- Optional Docker PHP and database containers
+- Plugin roots, explicit custom plugin paths and arbitrary `custom_code.paths`
 
 ## Outputs
 
-- `runs/<run-id>/inventory.json`
-- A blocker/warning summary
-- Plugin metadata with conservative custom/unclassified classification
-- Configured custom-code metadata and automatically detected non-core top-level candidates
+- `runs/<run-id>/inventory-before.json` for pre-change runs, with legacy `inventory.json` alias
+- `runs/<run-id>/inventory-after.json` for post-change runs
+- Structured findings and summary
 
 ## Procedure
 
-1. Resolve the source-side Moodle root and prove it looks like Moodle (`version.php`, `config.php`, `admin/cli`).
-2. Capture Moodle release/build from the source tree when readable without exposing secrets.
-3. Resolve the configured execution runtime. For `local`, inspect PHP on the current host. For `docker`, verify the configured container is running, record its image, prove the runtime Moodle root contains the expected markers, and capture PHP CLI/version/extensions using non-mutating `docker exec` commands.
-4. Discover the Git repository from the Moodle source path using Git itself, including the case where `.git` is located in a parent directory; record repository root, branch, HEAD and dirty state.
-5. Capture disk free space for the host-visible Moodle root, moodledata and configured backup paths.
-6. Inventory configured plugin type roots. Parse plugin component/version/requires metadata when `version.php` exists. Treat `local/*` and explicitly configured plugin paths as custom; leave other plugins `unclassified` until they are compared with the matching Moodle core release.
-7. Inventory explicitly configured arbitrary code paths using filesystem metadata only: existence, resolved path, scope, file/directory counts, aggregate size, common extensions and Git tracking state. Do not read file contents during inventory.
-8. Detect top-level directories outside the known Moodle core layout as `non_core_top_level_candidates`. This is a candidate list, not a compatibility verdict.
-9. When an optional database runtime container is configured, capture driver, container running state, image and database server binary version without credentials or database queries.
-10. Capture cron configuration and the presence of `admin/cli/cron.php` without executing cron.
-11. Classify blockers separately from warnings. Never mutate the host, container or Moodle instance.
+1. Prove the configured source root with `version.php`, `config.php` presence and `admin/cli`.
+2. Parse Moodle release/build/branch without reading secrets from `config.php`.
+3. Inspect the configured PHP runtime read-only: version, loaded modules, `max_input_vars`, `memory_limit` and `PHP_INT_SIZE`.
+4. For Docker, record container running state/image and runtime Moodle markers using argument-vector probes.
+5. Discover the containing Git repository even when `.git` is above `moodle.root`; record repo root, branch, HEAD and dirty state.
+6. Capture disk evidence for Moodle, moodledata and configured backup paths.
+7. Enumerate configured plugin roots and parse component/version/requires metadata. Treat `local/*` and explicit custom paths as custom; otherwise remain `unclassified`.
+8. Inventory arbitrary custom code metadata. Relative `..` is allowed only when the resolved target remains inside the discovered Git repository; absolute paths and repository escapes are rejected.
+9. Record optional database driver, configured prefix, container/image/running state and server binary version without DB credentials or queries.
+10. Record cron configuration and CLI presence without executing cron.
 
-## Plugin and non-core classification rules
+## Safety
 
-- Never claim a plugin is core solely because its directory name resembles a Moodle plugin. Matching against the exact Moodle release belongs to compatibility analysis.
-- `local/*` is considered project-specific/custom because Moodle core does not ship local plugins.
-- `plugins.custom_paths` may explicitly identify known non-core plugins in other plugin types.
-- `custom_code.paths` is always resolved relative to `moodle.root`.
-- Parent-relative paths such as `../autonomina` are allowed when their resolved target remains inside the Git repository root discovered from `moodle.root`.
-- A custom path may never escape the discovered Git repository root. If no Git repository can be discovered, it may not escape `moodle.root`.
-- Absolute custom-code paths are rejected so the environment config remains portable and explicit about its relationship to the Moodle root.
-- Inventory records `scope: moodle` for targets inside `moodle.root` and `scope: project` for allowed sibling/parent-relative targets inside the repository.
-- `custom_code.auto_detect_top_level` may surface unknown top-level directories automatically. These entries are `non-core candidates` and require later review.
-- Inventory may count files and extensions but must not persist source-code contents.
-
-## Docker runtime rules
-
-- Do not require Python inside the Moodle container; the kit may execute from the Docker host/WSL and use `docker exec` only for runtime inspection.
-- Never invoke `docker exec` through a shell string. Pass commands and paths as argument vectors.
-- Allowed runtime probes for inventory are read-only commands such as `php -v`, `php -m`, `test -f`, `test -d`, database server `--version`, and Docker metadata inspection.
-- Do not read `config.php` contents to discover credentials. Only test for its presence.
-- Treat an inaccessible/stopped configured Moodle runtime container or missing runtime Moodle markers as a critical finding.
+- Read-only only.
+- Do not execute Moodle cron, maintenance, upgrade, rollback or SQL.
+- Do not persist source contents from arbitrary custom code.
+- Do not read credential values from `config.php`.
+- Docker probes use argument vectors, never shell interpolation.
 
 ## Blocking conditions
 
-- Moodle root cannot be identified
-- Required path is inaccessible
-- Configured Docker Moodle runtime is unavailable or does not contain the expected Moodle root
-- PHP CLI cannot be inspected in the configured runtime
-- Insufficient disk threshold if one is configured
+- Moodle root/markers cannot be proven
+- Configured Docker PHP runtime is unavailable or has missing Moodle markers
+- PHP CLI cannot be inspected
+- Configured minimum free-space threshold is violated
 
 ## Universal rules
 
-- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
-- Preserve the run ID in every generated artifact.
-- Distinguish `critical`, `warning` and `info` findings.
-- Do not claim a check passed if it did not execute.
-- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+- Never print or persist passwords, private keys, bearer tokens, session cookies or credentialed DB DSNs.
+- Preserve the run ID in generated artifacts.
+- Distinguish `critical`, `warning`, `info` and unknown evidence.
+- Never claim a check passed if it did not execute.
