@@ -2,7 +2,7 @@
 name: moodle.plugins
 description: Review Moodle plugins and arbitrary project code for known upgrade risks while keeping uncertain compatibility explicit.
 effect: read-only
-version: 0.2.2
+version: 0.2.3
 ---
 
 # moodle.plugins
@@ -31,7 +31,7 @@ Analyze the plugin/custom-code candidates discovered by inventory, including cod
 3. Build source-scan targets from custom plugins and configured arbitrary custom code.
 4. Collapse overlapping scan targets to minimal parent roots regardless of configuration order. For example, when both `../batch` and `../batch/edx` are configured, scan `../batch` once and record `../batch/edx` as covered by that parent.
 5. Scan the resulting non-overlapping roots within configured file/byte bounds.
-6. Apply each deterministic risk rule only to source types where the rule is semantically valid. PHP runtime/API removals apply only to PHP/include source; SQL/schema coupling rules may also inspect SQL files. JavaScript `.split()` or `.each()` must never become PHP compatibility findings.
+6. Apply each deterministic risk rule only to source regions where the rule is semantically valid. PHP runtime/API removals apply only to executable PHP regions in PHP/include source, excluding embedded HTML/JavaScript, comments and string literals. SQL/schema coupling rules may inspect PHP/include strings and SQL files. JavaScript `.split()` or `.each()` and comments mentioning removed PHP APIs must never become PHP compatibility findings.
 7. Use distinct stable IDs for materially different removed PHP APIs such as `php_ereg_removed` and `php_split_removed`.
 8. Store finding ID, file path and line number, not source-code contents.
 9. Optionally compare the Moodle tree against a configured Git core reference and surface changed filenames for review.
@@ -43,6 +43,7 @@ Analyze the plugin/custom-code candidates discovered by inventory, including cod
 - Skip large generated/dependency trees such as `.git`, `vendor`, `node_modules`, `.venv` and moodledata.
 - Do not scan the same file twice merely because both a parent and child custom path were configured.
 - Do not apply language-specific compatibility rules to unrelated source languages.
+- Do not treat embedded JavaScript, comments or string literals inside a `.php` file as executable PHP API usage.
 - Pattern absence is not proof of full compatibility.
 - A manual-review item may remain even when no known critical signature was found.
 

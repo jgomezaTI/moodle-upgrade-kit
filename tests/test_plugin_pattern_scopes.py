@@ -24,6 +24,46 @@ def test_php_only_rules_do_not_flag_javascript_split_or_each(tmp_path: Path):
     ]
 
 
+def test_php_only_rules_ignore_embedded_javascript_in_php_files(tmp_path: Path):
+    root = tmp_path / "custom"
+    root.mkdir()
+    (root / "page.php").write_text(
+        "<?php\n$title = 'Example';\n?>\n"
+        "<script>\n"
+        "function split(value) { return value.split(','); }\n"
+        "const parts = split('a,b');\n"
+        "items.each(function () {});\n"
+        "</script>\n",
+        encoding="utf-8",
+    )
+
+    hits, _ = _scan_path(root, root, "4.1", 100, 100000, RISK_PATTERNS)
+
+    assert not [hit for hit in hits if hit["id"].startswith("php_")]
+
+
+def test_php_only_rules_ignore_php_comments_and_string_literals(tmp_path: Path):
+    root = tmp_path / "custom"
+    root.mkdir()
+    (root / "comments.php").write_text(
+        "<?php\n"
+        "// ereg() is deprecated.\n"
+        "/* split(',', $value); */\n"
+        "$message = \"each($items) is legacy\";\n"
+        "$template = <<<'TEXT'\n"
+        "create_function('', 'return true;');\n"
+        "TEXT;\n"
+        "$parts = split(',', $value);\n",
+        encoding="utf-8",
+    )
+
+    hits, _ = _scan_path(root, root, "4.1", 100, 100000, RISK_PATTERNS)
+
+    assert [(hit["id"], hit["line"]) for hit in hits if hit["id"].startswith("php_")] == [
+        ("php_split_removed", 8),
+    ]
+
+
 def test_ereg_and_split_are_reported_with_distinct_stable_ids(tmp_path: Path):
     root = tmp_path / "custom"
     root.mkdir()
@@ -40,16 +80,24 @@ def test_ereg_and_split_are_reported_with_distinct_stable_ids(tmp_path: Path):
     ]
 
 
-def test_sql_aware_rules_still_scan_sql_files(tmp_path: Path):
+def test_sql_aware_rules_still_scan_php_strings_and_sql_files(tmp_path: Path):
     root = tmp_path / "custom"
     root.mkdir()
     (root / "check.sql").write_text(
         "SELECT u.yahoo FROM mdl_user u;\n",
         encoding="utf-8",
     )
+    (root / "query.php").write_text(
+        '<?php\n$sql = "SELECT u.yahoo FROM mdl_user u";\n',
+        encoding="utf-8",
+    )
 
     hits, _ = _scan_path(root, root, "4.1", 100, 100000, RISK_PATTERNS)
-    ids = [hit["id"] for hit in hits]
+    findings = {(hit["id"], hit["path"]) for hit in hits}
 
-    assert "hardcoded_mdl_prefix" in ids
-    assert "legacy_user_contact_column" in ids
+    assert findings == {
+        ("hardcoded_mdl_prefix", "check.sql"),
+        ("hardcoded_mdl_prefix", "query.php"),
+        ("legacy_user_contact_column", "check.sql"),
+        ("legacy_user_contact_column", "query.php"),
+    }
