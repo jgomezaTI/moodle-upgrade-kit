@@ -28,6 +28,7 @@ def validate_config(data: dict[str, Any]) -> None:
     project = data.get("project", {})
     moodle = data.get("moodle", {})
     safety = data.get("safety", {})
+    runtime = data.get("runtime", {})
 
     for key in ("name", "environment"):
         if not project.get(key):
@@ -35,6 +36,14 @@ def validate_config(data: dict[str, Any]) -> None:
     for key in ("root", "base_url", "target_version"):
         if not moodle.get(key):
             raise ConfigError(f"moodle.{key} is required")
+
+    runtime_type = runtime.get("type", "local")
+    if runtime_type not in ("local", "docker"):
+        raise ConfigError("runtime.type must be local or docker")
+    if runtime_type == "docker":
+        for key in ("container", "moodle_root"):
+            if not runtime.get(key):
+                raise ConfigError(f"runtime.{key} is required for docker targets")
 
     if project.get("environment") == "production" and safety.get("allow_mutation"):
         if not safety.get("require_human_gate", True):
