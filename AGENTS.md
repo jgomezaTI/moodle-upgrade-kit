@@ -9,125 +9,94 @@ Before making changes, read:
 3. the related implementation under `src/moodle_upgrade/`
 4. the related tests under `tests/`
 
-Do not rely on previous ChatGPT or Codex conversation history as the source of truth. Repository files are authoritative.
+Repository files are authoritative; do not depend on previous ChatGPT or Codex conversation history.
 
 ## Project goal
 
-`moodle-upgrade-kit` is an auditable automation framework for Moodle upgrades.
+`moodle-upgrade-kit` is an auditable Moodle upgrade framework:
 
-The intended model is:
+- skills/commands define capability contracts;
+- deterministic Python performs execution;
+- workflows orchestrate the critical path;
+- destructive actions require machine gates plus explicit human approval;
+- every run produces structured evidence under `runs/<run-id>/`;
+- real regressions should become reusable deterministic checks.
 
-- skills/commands define capability contracts and reasoning boundaries;
-- deterministic Python/scripts perform execution;
-- workflows orchestrate capabilities;
-- destructive actions require explicit human gates;
-- every run produces evidence under `runs/<run-id>/`;
-- regressions found during real upgrades should become reusable deterministic checks.
+The core remains generic first. Enaex-specific checks may be layered on without weakening generic safety behavior.
 
-The framework must remain generic first. Enaex-specific checks may be added later as extensions or targeted checks without coupling the core framework to one customer.
+## Current implementation state
 
-## Capability roadmap
+The guarded executable critical path now exists on the active development branch:
 
-The planned capabilities are:
+```text
+inventory before
+→ compatibility
+→ plugins/custom code
+→ baseline (endpoints + database + logs + cron evidence)
+→ backup verification
+→ human gate
+→ upgrade
+→ inventory/endpoints/logs/database after
+→ validate
+→ human acceptance gate
+→ document
+```
 
-- `moodle.inventory`
-- `moodle.baseline`
-- `moodle.compatibility`
-- `moodle.plugins`
-- `moodle.endpoints`
-- `moodle.logs`
-- `moodle.database`
-- `moodle.backup`
-- `moodle.upgrade`
-- `moodle.validate`
-- `moodle.rollback`
-- `moodle.document`
+Rollback is separately gated:
 
-Current priority: validate/harden `moodle.inventory` against real environments, then implement `moodle.compatibility`.
+```text
+rollback gate
+→ explicit rollback commands
+→ post-rollback inventory/endpoints/logs/database
+→ validate --mode rollback
+→ document
+```
+
+The next critical task is **real read-only validation against the Enaex WSL/Docker environment**. Do not broaden scope before that evidence is reviewed.
 
 ## Safety invariants
 
-These rules are mandatory:
+Mandatory rules:
 
-- Treat discovery, inventory, compatibility, endpoint, log, and database-inspection work as read-only unless a capability explicitly states otherwise.
-- Never enable maintenance mode, execute an upgrade, perform rollback, mutate Moodle, or write to the database from a read-only capability.
-- Never read or persist passwords, private keys, bearer tokens, cookies, credentialed DSNs, or secrets from Moodle `config.php` into evidence.
-- Never claim a check passed when it was not actually executed.
-- Preserve distinctions between `critical`, `warning`, `info`, skipped, unknown, and successful states.
-- Prefer deterministic repository code over improvised shell commands.
-- For Docker operations, pass command arguments as vectors; avoid shell-interpolated command strings.
-- Upgrade and rollback capabilities must retain explicit human gates.
-- Do not merge PRs or perform destructive operations unless the user explicitly requests it.
-
-## Development rules
-
-- Make changes through focused branches and PRs.
-- Add or update tests for behavior changes.
-- A real-world regression or environment-specific failure should become a reusable check/test when practical.
-- Keep generated evidence out of source control. `runs/<run-id>/` is runtime evidence, not source code.
-- Keep local environment files under `configs/environments/*.local.yml`; these are not intended for commit.
-- Do not place credentials in YAML examples.
-- Keep skill contracts synchronized with implementation behavior when semantics change.
+- Inventory, compatibility, plugin analysis, baseline, endpoints, logs, database validation, backup verification and validation are read-only.
+- `safety.allow_mutation` is false by default.
+- Upgrade and rollback require an allowed environment, explicit human approval and their machine-verifiable prerequisites.
+- Human approval cannot override a critical compatibility/baseline/plugin/backup/Git gate.
+- Never infer a code transition or rollback restore procedure. Environment owners must configure exact commands.
+- Configured mutation commands must be argv-safe: reject shell control/interpolation and credential-bearing arguments.
+- Never read/persist passwords, private keys, bearer tokens, cookies, credentialed DSNs or secrets from Moodle `config.php` into evidence.
+- Database validation reads only configured SQL files, rejects mutation SQL and obtains credentials from named environment variables.
+- Never claim success for a check that did not execute. Preserve `critical`, `warning`, `info`, skipped, unknown and successful states.
+- An upgrade/rollback command sequence exiting zero is not acceptance; `moodle.validate` must pass afterward.
+- Do not merge PRs or execute destructive operations unless the user explicitly requests it.
 
 ## Real validation environment
 
-The current real test environment is an Enaex Spanish LMS project under WSL + Docker.
-
-Host layout:
+Current real target (do not generalize as defaults):
 
 ```text
-/home/javier/proyectos/lms-enaex-espanol/
-├── .git/
-├── public_html/
-│   ├── Moodle source
-│   ├── portal_v3/
-│   └── moodledata/
-├── autonomina/
-└── moodle-upgrade-kit/
+Git project root: /home/javier/proyectos/lms-enaex-espanol
+Moodle root:      /home/javier/proyectos/lms-enaex-espanol/public_html
+Kit repo:         /home/javier/proyectos/lms-enaex-espanol/moodle-upgrade-kit
 ```
 
-Observed target details:
-
-- Current Moodle: `3.11.18`
-- Moodle branch: `311`
-- Upgrade target: `4.1`
+- Current Moodle: `3.11.18` / branch `311`
+- Target Moodle: `4.1`
 - PHP container: `lms-enaex-espanol-php-1`
-- PHP runtime observed: `5.6.40`
-- Moodle path inside PHP container: `/var/www/html`
-- Moodledata inside PHP container: `/var/www/moodledata`
-- Database container: `lms-enaex-espanol-db-1`
-- Database image observed: `mysql:8.0.41`
+- Observed PHP: `5.6.40`
+- Container Moodle root: `/var/www/html`
+- Container moodledata: `/var/www/moodledata`
+- DB container: `lms-enaex-espanol-db-1`
+- Observed DB image: `mysql:8.0.41`
+- Arbitrary custom code includes `public_html/portal_v3` and project-level paths such as `../autonomina`.
 
-Do not generalize these values as global defaults. They describe the current real validation target only.
+Expected compatibility behavior for this target: the observed PHP 5.6.40 must block Moodle 3.11 → 4.1 before any mutation path can execute.
 
-## Moodle root vs project root
+## Moodle root, Git root and custom code
 
-For this environment:
+Git discovery must work when `.git` is above `moodle.root`.
 
-```text
-Git project root:
-/home/javier/proyectos/lms-enaex-espanol
-
-Moodle root:
-/home/javier/proyectos/lms-enaex-espanol/public_html
-```
-
-Git discovery must therefore work when `.git` is above `moodle.root`.
-
-## Custom code and plugins
-
-Do not assume all relevant code is a Moodle plugin.
-
-Examples:
-
-- `public_html/portal_v3` is arbitrary custom code inside the Moodle root.
-- `../autonomina` is project-level custom code outside `public_html` but inside the project Git repository.
-- `local/*` should be treated as project-specific/custom.
-- Plugins under `auth`, `blocks`, `mod`, `report`, etc. should remain conservatively `unclassified` unless explicitly configured custom or compared against the exact Moodle core release.
-
-`custom_code.paths` is relative to `moodle.root` and may use parent traversal when the resolved target remains inside the discovered Git repository root.
-
-Allowed example:
+`custom_code.paths` is relative to `moodle.root`:
 
 ```yaml
 custom_code:
@@ -136,33 +105,52 @@ custom_code:
     - ../autonomina
 ```
 
-Absolute paths or traversal escaping the project Git root must be rejected.
+Parent traversal is allowed only when the resolved path remains inside the discovered project Git root. Absolute paths and repository escapes are rejected.
 
-Inventory should collect metadata for arbitrary custom code, not persist its source contents. Deeper source compatibility inspection belongs to `moodle.compatibility`.
+Do not assume all relevant code is a Moodle plugin. `moodle.plugins` must inspect configured arbitrary code and custom plugins with bounded scans while leaving unknown/unclassified compatibility explicit.
 
-## `moodle.inventory` expectations
+## Evidence contract
 
-The current implementation should be able to capture:
+Important artifacts include:
 
-- Moodle root markers;
-- Moodle release/version/branch;
-- Docker runtime state/image when configured;
-- PHP CLI version and loaded modules from the real runtime;
-- Git repository root, branch, HEAD, and dirty state;
-- disk usage;
-- plugin metadata and conservative classification;
-- arbitrary custom code metadata;
-- non-core top-level candidates;
-- optional database container metadata/server version;
-- cron configuration and `admin/cli/cron.php` presence;
-- findings and summary;
-- evidence under `runs/<run-id>/inventory.json`.
+```text
+runs/<run-id>/
+├── inventory-before.json
+├── compatibility.json
+├── plugins.json
+├── baseline-before.json
+├── endpoints-before.json
+├── logs-before.json
+├── database-before.json
+├── backup.json
+├── upgrade-plan.md
+├── upgrade-result.json
+├── inventory-after.json
+├── endpoints-after.json
+├── logs-after.json
+├── database-after.json
+├── validation.json
+├── rollback-plan.md
+├── rollback-result.json
+├── final-report.md
+└── document-result.json
+```
 
-Do not move compatibility verdicts into inventory unnecessarily. For example, inventory records the PHP version; whether that PHP version is valid for the target Moodle belongs to `moodle.compatibility`.
+Generated run evidence remains ignored by Git.
 
-## Testing
+## Development rules
 
-Before proposing completion of a code change, run the most relevant tests. The canonical project checks include:
+- Work through focused branches/PRs and do not silently include unrelated changes.
+- Keep skill contracts synchronized with implementation behavior.
+- Add regression coverage for behavior changes and real upgrade failures.
+- Keep local environment configs under `configs/environments/*.local.yml` and out of source control.
+- Never place credential values in YAML examples.
+- Prefer deterministic repository code over improvised shell.
+- Preserve stable check/finding IDs for auditability.
+
+## Canonical checks
+
+Before declaring code work complete:
 
 ```bash
 python -m pip install -e '.[test]'
@@ -170,30 +158,13 @@ pytest
 python -m moodle_upgrade.cli validate-config --config configs/example.yml
 ```
 
-For local development with an activated virtual environment, `pytest` and `muk ...` are acceptable equivalents where appropriate.
+For the real Enaex environment, remain read-only until compatibility blockers are resolved and the user explicitly enables/gates mutation.
 
-When testing against the real Enaex Docker environment, keep the test read-only unless the active capability explicitly allows mutation.
+## When starting a task
 
-## GitHub workflow
-
-Use small, focused PRs with:
-
-- what changed;
-- why it changed;
-- safety impact;
-- validation performed.
-
-Do not silently include unrelated changes.
-
-The initial merged implementation history is summarized in `docs/PROJECT_CONTEXT.md`.
-
-## When starting a new task
-
-1. Read `docs/PROJECT_CONTEXT.md`.
-2. Inspect the relevant capability contract.
-3. Inspect existing implementation and tests.
-4. State what is already implemented versus what is missing.
-5. Preserve read-only boundaries unless the requested capability explicitly requires mutation.
-6. Implement the smallest coherent change.
-7. Add regression coverage.
-8. Report exactly what was tested and what remains unverified.
+1. Read `docs/PROJECT_CONTEXT.md` and this file.
+2. Inspect the relevant skill contract, implementation and tests.
+3. Identify the exact next step on the critical path.
+4. Do not broaden scope unless it is necessary to unblock that step.
+5. Add deterministic tests for discovered defects.
+6. Report exactly what was executed and what remains unverified on the real environment.
