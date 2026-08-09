@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
-from pathlib import Path
 import json
 import sys
 
@@ -11,6 +10,7 @@ from .evidence import run_dir, write_json, read_json
 from .endpoints import run_endpoint_checks
 from .logs import analyze_files
 from .compare import compare_endpoint_sets
+from .inventory import collect_inventory
 
 
 def cmd_validate_config(args):
@@ -33,6 +33,15 @@ def cmd_new_run(args):
     write_json(rd / "metadata.json", payload)
     print(rid)
     return 0
+
+
+def cmd_inventory(args):
+    cfg = load_config(args.config)
+    rd = run_dir(args.run_id)
+    result = collect_inventory(cfg)
+    write_json(rd / "inventory.json", result)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 2 if result.get("summary", {}).get("critical", 0) else 0
 
 
 def cmd_endpoints(args):
@@ -76,6 +85,11 @@ def build_parser():
     x.add_argument("--config", required=True)
     x.add_argument("--run-id")
     x.set_defaults(func=cmd_new_run)
+
+    x = sub.add_parser("inventory")
+    x.add_argument("--config", required=True)
+    x.add_argument("--run-id", required=True)
+    x.set_defaults(func=cmd_inventory)
 
     x = sub.add_parser("endpoints")
     x.add_argument("--config", required=True)
