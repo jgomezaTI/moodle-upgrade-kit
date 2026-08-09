@@ -1,0 +1,15 @@
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+.env
+.env.*
+!*.example
+runs/*
+!runs/.gitkeep
+configs/environments/*.local.yml
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/

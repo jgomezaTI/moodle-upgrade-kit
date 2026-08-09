@@ -1,0 +1,7 @@
+# Development-only content
+.git/
+.github/
+tests/
+runs/
+__pycache__/
+*.pyc
