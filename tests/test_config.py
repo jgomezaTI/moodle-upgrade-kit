@@ -22,3 +22,21 @@ def test_production_cannot_disable_gate():
     cfg["safety"]["require_human_gate"] = False
     with pytest.raises(ConfigError):
         validate_config(cfg)
+
+
+def test_docker_runtime_requires_container_and_root():
+    cfg = base_config()
+    cfg["runtime"] = {"type": "docker"}
+    with pytest.raises(ConfigError, match="runtime.container"):
+        validate_config(cfg)
+
+
+def test_docker_runtime_valid():
+    cfg = base_config()
+    cfg["runtime"] = {
+        "type": "docker",
+        "container": "moodle-php-1",
+        "moodle_root": "/var/www/html",
+        "moodledata": "/var/www/moodledata",
+    }
+    validate_config(cfg)
