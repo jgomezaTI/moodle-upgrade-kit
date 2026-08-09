@@ -111,12 +111,15 @@ def _plugins(root: Path, configured_roots: list[str], configured_custom_paths: l
             if not child.is_dir() or child.name.startswith("."):
                 continue
             component_path = str(PurePosixPath(relative_root) / child.name)
-            metadata = _read_plugin_metadata(child / "version.php")
+            version_file = child / "version.php"
             explicit_custom = component_path in custom_paths
+            if not version_file.is_file() and not explicit_custom:
+                continue
+            metadata = _read_plugin_metadata(version_file)
             classification = "custom" if relative_root == "local" or explicit_custom else "unclassified"
             results.append({
                 "component_path": component_path, "component": metadata["component"], "version": metadata["version"], "requires": metadata["requires"],
-                "has_version_php": (child / "version.php").exists(), "classification": classification,
+                "has_version_php": version_file.is_file(), "classification": classification,
                 "classification_reason": "local plugin" if relative_root == "local" else "configured custom path" if explicit_custom else "not yet compared with Moodle core",
             })
     return results
