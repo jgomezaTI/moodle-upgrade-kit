@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess
 
 import moodle_upgrade.inventory as inventory_module
-from moodle_upgrade.inventory import _database_platform, _git_state, collect_inventory
+from moodle_upgrade.inventory import _custom_path_summary, _database_platform, _git_state, collect_inventory
 
 
 def base_config(root: Path):
@@ -91,10 +91,39 @@ def test_inventory_records_custom_code_and_non_core_candidate(tmp_path):
 
     portal_result = result["custom_code"]["configured_paths"][0]
     assert portal_result["exists"] is True
+    assert portal_result["scope"] == "moodle"
     assert portal_result["file_count"] == 2
     assert portal_result["top_extensions"][".php"] == 1
     assert "portal_v3" in result["custom_code"]["non_core_top_level_candidates"]
     assert result["summary"]["configured_custom_code_count"] == 1
+
+
+def test_parent_relative_custom_code_is_allowed_inside_repository(tmp_path):
+    repo = tmp_path / "repo"
+    root = repo / "public_html"
+    custom = repo / "autonomina"
+    root.mkdir(parents=True)
+    custom.mkdir()
+    (custom / "load_data.php").write_text("<?php\n", encoding="utf-8")
+
+    result = _custom_path_summary(root, "../autonomina", repo, 100)
+
+    assert result["exists"] is True
+    assert result["scope"] == "project"
+    assert result["resolved_path"] == str(custom.resolve())
+    assert result["file_count"] == 1
+    assert result["top_extensions"][".php"] == 1
+
+
+def test_parent_relative_custom_code_cannot_escape_repository(tmp_path):
+    repo = tmp_path / "repo"
+    root = repo / "public_html"
+    root.mkdir(parents=True)
+
+    result = _custom_path_summary(root, "../../outside", repo, 100)
+
+    assert result["exists"] is False
+    assert "escapes allowed repository root" in result["error"]
 
 
 def test_inventory_reads_php_from_docker_runtime(tmp_path, monkeypatch):
