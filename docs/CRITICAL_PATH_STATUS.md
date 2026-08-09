@@ -2,18 +2,11 @@
 
 _Last updated: 2026-08-09_
 
-This file is the current implementation-status companion to `docs/PROJECT_CONTEXT.md`. The project-context document preserves the longer architecture/history; this file records what is implemented now and what must happen next without broadening scope.
+This file records the current deterministic critical path and what has been validated against the real Enaex environment. For the most detailed current handoff, read `docs/CODEX_HANDOFF.md`.
 
-## Current branch / PR
+## Current deterministic state
 
-- Branch: `agent/critical-path-completion`
-- PR: `#6 — feat: complete guarded Moodle upgrade critical path`
-- State: draft, mergeable
-- GitHub Actions: passing
-- Canonical test result on the PR merge ref: **31 passed**
-- Generic example configuration validation: **config: OK**
-
-## Implemented critical path
+Implemented:
 
 ```text
 inventory before
@@ -29,105 +22,168 @@ inventory before
 → document
 ```
 
-Rollback:
+Rollback is implemented as a separate explicit gated flow.
 
-```text
-rollback gate
-→ explicit rollback commands
-→ inventory/endpoints/logs/database after
-→ validate --mode rollback
-→ document
-```
+Mutation remains disabled by default and has not been enabled for the real Enaex validation.
 
-## Safety state
-
-The generic configuration remains non-mutating by default:
-
-```yaml
-safety:
-  allow_mutation: false
-
-upgrade:
-  code_transition_command: null
-
-rollback:
-  commands: []
-```
-
-No real Moodle upgrade or rollback has been executed as part of PR #6.
-
-Machine gates are authoritative. Human approval cannot override critical failures in inventory/Git state, compatibility, plugin/custom-code analysis, baseline or backup verification.
-
-## Real Enaex validation target
+## Real environment
 
 ```text
 Git project root: /home/javier/proyectos/lms-enaex-espanol
 Moodle root:      /home/javier/proyectos/lms-enaex-espanol/public_html
 Kit repo:         /home/javier/proyectos/lms-enaex-espanol/moodle-upgrade-kit
+Moodle:           3.11.18
+Target:           4.1
+PHP:              5.6.40 in lms-enaex-espanol-php-1
+MySQL:            8.0.41 in lms-enaex-espanol-db-1
 ```
 
-- Current Moodle: `3.11.18`
-- Target Moodle: `4.1`
-- PHP container: `lms-enaex-espanol-php-1`
-- Observed PHP: `5.6.40`
-- DB container: `lms-enaex-espanol-db-1`
-- Observed DB image: `mysql:8.0.41`
-- Custom application code includes `portal_v3` and project-level paths such as `../autonomina`.
+`../autonomina` is not part of this repository and is not a required custom path for this target.
 
-The expected first blocker is PHP: `moodle.compatibility` must refuse the 3.11 → 4.1 mutation path while the observed PHP runtime remains 5.6.40.
+Current run ID:
 
-## Next critical step — no deviation
+```text
+ENAEX-311-TO-410-CRITICAL-PATH-V2
+```
 
-Run PR #6 against the real WSL/Docker environment **read-only** and inspect its generated evidence. Do not configure/enable mutation yet.
+## Validated gates
 
-Recommended test run:
+### Inventory — validated
+
+Real Inventory V2 validates:
+
+- Moodle identity/version/target;
+- Docker PHP runtime;
+- PHP modules/settings;
+- containing parent Git root;
+- database runtime metadata;
+- project-level and Moodle-root custom code;
+- conservative plugin enumeration;
+- no obvious persisted credential values.
+
+PR #7 converted a real false plugin-enumeration defect into regression coverage.
+
+### Compatibility — validated behavior
+
+Current real result correctly blocks mutation:
+
+```text
+upgrade path 3.11.18 → 4.1: PASS
+MySQL 8.0.41: PASS
+PHP 5.6.40 for Moodle 4.1: CRITICAL
+PHP 5.6.40 for current Moodle 3.11: CRITICAL
+exif/sodium recommended extensions: warning
+max_input_vars=1000: warning
+compatible: false
+```
+
+This is expected safety behavior.
+
+### Plugins/custom code — current gate
+
+PR #8 is merged and real validation confirmed overlapping paths are deduplicated:
+
+```text
+../batch scanned once
+../batch/coursera     covered by ../batch
+../batch/edx          covered by ../batch
+../batch/proofpoint   covered by ../batch
+../batch/simuladores  covered by ../batch
+../batch/sincronizacion covered by ../batch
+```
+
+The first post-PR8 real plugin scan reported:
+
+```text
+critical: 119
+warning: 2772
+risk_hit_count: 2891
+plugin_count: 105
+review_count: 105
+scan_root_count: 7
+covered_scan_path_count: 5
+ready: false
+```
+
+Those raw counts are not trustworthy as final blocker counts because the run exposed another scanner defect: PHP-specific patterns were matching JavaScript `.split()` and `.each()` calls.
+
+Observed analysis:
+
+```text
+104 / 119 php_ereg_removed criticals were in .js files
+381 / 384 php_each_removed warnings were in .js files
+```
+
+PR #9 (`fix: scope PHP compatibility patterns to PHP files`) contains the fix and passing regression tests. At the time of this status update it is open, draft and mergeable.
+
+## Exact next step
+
+Do not rerun inventory or compatibility.
+
+After PR #9 is merged by the user:
 
 ```bash
 cd ~/proyectos/lms-enaex-espanol/moodle-upgrade-kit
+git checkout main
+git pull origin main
 
-git fetch origin
-git checkout agent/critical-path-completion
-
-source .venv/bin/activate
-python -m pip install -e '.[test]'
-pytest
-
-RUN_ID=ENAEX-311-TO-410-CRITICAL-PATH
+RUN_ID=ENAEX-311-TO-410-CRITICAL-PATH-V2
 CONFIG=configs/environments/lms-enaex-espanol.local.yml
 
-muk inventory --config "$CONFIG" --run-id "$RUN_ID" --phase before
-muk compatibility --config "$CONFIG" --run-id "$RUN_ID"
-muk plugins --config "$CONFIG" --run-id "$RUN_ID"
+cp "runs/$RUN_ID/plugins.json" "runs/$RUN_ID/plugins-pre-pr9.json"
+
+muk plugins \
+  --config "$CONFIG" \
+  --run-id "$RUN_ID"
 ```
 
-At this point, stop and inspect the evidence. `moodle.compatibility` is expected to return a non-zero blocking result while PHP remains 5.6.40. That is a successful safety outcome, not a kit failure.
+Then verify:
 
-Do not proceed to a mutating command. Baseline/database/backup configuration can be hardened from the read-only findings after inventory/compatibility/plugins are confirmed against the real instance.
+- no PHP-only finding is attached to `.js` files;
+- batch overlap deduplication remains correct;
+- remaining critical findings are PHP/include candidates only;
+- no secrets appear in evidence.
 
-## Evidence to review first
+Any new scanner defect must become a regression test before advancing.
+
+## Work after plugin evidence is trustworthy
+
+In order:
 
 ```text
-runs/ENAEX-311-TO-410-CRITICAL-PATH/
-├── inventory-before.json
-├── inventory.json
-├── compatibility.json
-└── plugins.json
+1. Review remaining real PHP critical candidates.
+2. Improve exact core-vs-custom plugin classification/reference to reduce 105 manual-review entries.
+3. Group/prioritize noisy repeated warnings such as hard-coded mdl_ prefix findings.
+4. Validate baseline/endpoints/database/logs against the real environment.
+5. Configure the actual local base URL and DB validation environment variables/checks.
+6. Validate backup verification against real backup conventions.
+7. Prove upgrade remains blocked while compatibility/Git/other machine gates fail.
+8. Only then begin the agent layer.
 ```
 
-Verify specifically:
+Do not change PHP simply to make compatibility pass yet. Do not run a real upgrade or rollback.
 
-- containing Git root is `/home/javier/proyectos/lms-enaex-espanol`;
-- PHP evidence comes from `lms-enaex-espanol-php-1`;
-- PHP modules/settings are captured;
-- DB container/image/version metadata is present;
-- `portal_v3` is inventoried/scanned;
-- configured `../autonomina` resolves with project scope and remains inside the Git root;
-- custom/unclassified plugin review is conservative;
-- PHP 5.6.40 is a critical compatibility blocker for the documented current/target Moodle versions;
-- no credential values appear in evidence.
+## Agent layer — planned after deterministic validation
 
-## Rule after the real run
+Planned logical agents:
 
-Any incorrect or missing evidence discovered in the real environment must become a deterministic regression test before the critical path advances.
+```text
+upgrade-orchestrator
+discovery-agent
+compatibility-agent
+baseline-agent
+upgrade-agent
+rollback-agent
+documentation-agent
+```
 
-Once the read-only real run behaves correctly, the next work is environment preparation/configuration required to clear real blockers (starting with the PHP runtime for Moodle 4.1), then baseline/backup evidence for that same environment. Mutation remains last.
+Agents orchestrate existing deterministic capabilities and evidence. They must not reimplement compatibility rules, invent operational commands, or bypass machine gates.
+
+## Safety invariants
+
+- `safety.allow_mutation: false` during current validation.
+- No real upgrade/rollback.
+- Human approval cannot override failed machine gates.
+- Database checks remain read-only.
+- No secrets in configuration/evidence/argv.
+- Stable finding IDs and deterministic regression coverage are required.
