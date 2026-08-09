@@ -2,14 +2,15 @@
 
 ## Start here
 
-Before making changes, read:
+Before making changes, read in this order:
 
-1. `docs/PROJECT_CONTEXT.md`
-2. the relevant `skills/<capability>/SKILL.md`
-3. the related implementation under `src/moodle_upgrade/`
-4. the related tests under `tests/`
+1. `docs/PROJECT_CONTEXT.md` for architecture/history
+2. `docs/CRITICAL_PATH_STATUS.md` for the current implementation state and exact next step
+3. the relevant `skills/<capability>/SKILL.md`
+4. the related implementation under `src/moodle_upgrade/`
+5. the related tests under `tests/`
 
-Repository files are authoritative; do not depend on previous ChatGPT or Codex conversation history.
+Repository files are authoritative; do not depend on previous ChatGPT or Codex conversation history. When older status text in `PROJECT_CONTEXT.md` conflicts with `CRITICAL_PATH_STATUS.md`, use `CRITICAL_PATH_STATUS.md` for current implementation/next-step status.
 
 ## Project goal
 
@@ -26,7 +27,7 @@ The core remains generic first. Enaex-specific checks may be layered on without 
 
 ## Current implementation state
 
-The guarded executable critical path now exists on the active development branch:
+The guarded executable critical path exists on the active development branch:
 
 ```text
 inventory before
@@ -162,7 +163,7 @@ For the real Enaex environment, remain read-only until compatibility blockers ar
 
 ## When starting a task
 
-1. Read `docs/PROJECT_CONTEXT.md` and this file.
+1. Read `docs/PROJECT_CONTEXT.md`, then `docs/CRITICAL_PATH_STATUS.md`.
 2. Inspect the relevant skill contract, implementation and tests.
 3. Identify the exact next step on the critical path.
 4. Do not broaden scope unless it is necessary to unblock that step.
