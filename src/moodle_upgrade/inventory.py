@@ -148,28 +148,58 @@ def _plugins(root: Path, configured_roots: list[str], configured_custom_paths: l
                 "requires": metadata["requires"],
                 "has_version_php": version_file.exists(),
                 "classification": classification,
-                "classification_reason": "local plugin" if relative_root == "local" else ("configured custom path" if explicit_custom else "not yet compared with Moodle core"),
+                "classification_reason": (
+                    "local plugin" if relative_root == "local"
+                    else "configured custom path" if explicit_custom
+                    else "not yet compared with Moodle core"
+                ),
             })
     return results
 
 
+def _path_within(target: Path, boundary: Path) -> bool:
+    try:
+        target.resolve().relative_to(boundary.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def _custom_path_summary(root: Path, relative_path: str, repo_root: Path | None, max_files: int) -> dict[str, Any]:
     candidate = Path(relative_path)
-    if candidate.is_absolute() or ".." in candidate.parts:
-        return {"path": relative_path, "exists": False, "error": "custom path must be relative to moodle.root"}
+    if candidate.is_absolute():
+        return {"path": relative_path, "exists": False, "error": "custom path must be relative, not absolute"}
 
-    target = (root / candidate).resolve()
-    try:
-        target.relative_to(root.resolve())
-    except ValueError:
-        return {"path": relative_path, "exists": False, "error": "custom path escapes moodle.root"}
+    root_resolved = root.resolve()
+    target = (root_resolved / candidate).resolve()
+    boundary = repo_root.resolve() if repo_root else root_resolved
+
+    if not _path_within(target, boundary):
+        scope = "repository root" if repo_root else "moodle.root"
+        return {
+            "path": relative_path,
+            "exists": False,
+            "resolved_path": str(target),
+            "error": f"custom path escapes allowed {scope}",
+        }
+
+    scope = "moodle" if _path_within(target, root_resolved) else "project"
+    base_result = {
+        "path": relative_path,
+        "resolved_path": str(target),
+        "scope": scope,
+    }
 
     if not target.exists():
-        return {"path": relative_path, "exists": False, "tracked_by_git": _git_tracks_path(repo_root, target)}
+        return {
+            **base_result,
+            "exists": False,
+            "tracked_by_git": _git_tracks_path(repo_root, target),
+        }
 
     if target.is_file():
         return {
-            "path": relative_path,
+            **base_result,
             "exists": True,
             "kind": "file",
             "size_bytes": target.stat().st_size,
@@ -192,14 +222,13 @@ def _custom_path_summary(root: Path, relative_path: str, repo_root: Path | None,
             size_bytes += entry.stat().st_size
         except OSError:
             pass
-        suffix = entry.suffix.lower() or "[no-extension]"
-        extensions[suffix] += 1
+        extensions[entry.suffix.lower() or "[no-extension]"] += 1
         if file_count >= max_files:
             truncated = True
             break
 
     return {
-        "path": relative_path,
+        **base_result,
         "exists": True,
         "kind": "directory",
         "file_count": file_count,
@@ -243,7 +272,6 @@ def _docker_runtime(runtime_cfg: dict[str, Any]) -> tuple[dict[str, Any], dict[s
     container = str(runtime_cfg.get("container"))
     runtime_root = runtime_cfg.get("moodle_root")
     runtime_moodledata = runtime_cfg.get("moodledata")
-
     inspected = _docker_inspect(container)
     running = inspected["running"]
 
@@ -281,8 +309,7 @@ def _docker_runtime(runtime_cfg: dict[str, Any]) -> tuple[dict[str, Any], dict[s
 
 def _runtime_platform(config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     runtime_cfg = config.get("runtime", {})
-    runtime_type = runtime_cfg.get("type", "local")
-    if runtime_type == "docker":
+    if runtime_cfg.get("type", "local") == "docker":
         return _docker_runtime(runtime_cfg)
 
     php = _run(["php", "-v"])
@@ -331,7 +358,7 @@ def collect_inventory(config: dict[str, Any]) -> dict[str, Any]:
     findings: list[Finding] = []
 
     required_markers = [root / "version.php", root / "config.php", root / "admin" / "cli"]
-    marker_state = {str(p.relative_to(root)): p.exists() for p in required_markers}
+    marker_state = {str(path.relative_to(root)): path.exists() for path in required_markers}
     if not root.is_dir():
         findings.append(Finding("critical", "MOODLE_ROOT_MISSING", f"Moodle root is not accessible: {root}"))
     elif not all(marker_state.values()):
@@ -343,7 +370,6 @@ def collect_inventory(config: dict[str, Any]) -> dict[str, Any]:
             findings.append(Finding("critical", "DOCKER_CONTAINER_UNAVAILABLE", f"Docker container is not running or accessible: {runtime.get('container')}"))
         elif runtime.get("markers") and not all(runtime["markers"].values()):
             findings.append(Finding("critical", "RUNTIME_MOODLE_MARKERS_MISSING", "Docker runtime does not contain all expected Moodle markers."))
-
     if not php["ok"]:
         findings.append(Finding("critical", "PHP_UNAVAILABLE", "PHP CLI could not be executed in the configured runtime."))
 
@@ -378,12 +404,14 @@ def collect_inventory(config: dict[str, Any]) -> dict[str, Any]:
     repo_root = Path(git["repo_root"]) if git.get("repo_root") else None
     custom_inventory = [_custom_path_summary(root, path, repo_root, max_files) for path in configured_custom_paths]
     for item in custom_inventory:
-        if not item.get("exists"):
+        if item.get("error"):
+            findings.append(Finding("warning", "CUSTOM_PATH_OUTSIDE_BOUNDARY", f"Custom code path is not allowed: {item['path']} ({item['error']})"))
+        elif not item.get("exists"):
             findings.append(Finding("warning", "CUSTOM_PATH_MISSING", f"Configured custom code path is missing: {item['path']}"))
 
     excluded = [moodledata] if moodledata else []
     auto_detect = custom_cfg.get("auto_detect_top_level", True)
-    non_core_candidates = _non_core_top_level_candidates(root, [p for p in excluded if p is not None]) if auto_detect else []
+    non_core_candidates = _non_core_top_level_candidates(root, [path for path in excluded if path is not None]) if auto_detect else []
 
     database = _database_platform(config)
     if database.get("container") and database.get("running") is False:
@@ -397,7 +425,7 @@ def collect_inventory(config: dict[str, Any]) -> dict[str, Any]:
     }
 
     custom_plugin_count = sum(1 for plugin in plugin_inventory if plugin["classification"] == "custom")
-    payload = {
+    return {
         "identity": {
             "project": config.get("project", {}),
             "moodle_root": str(root),
@@ -424,15 +452,14 @@ def collect_inventory(config: dict[str, Any]) -> dict[str, Any]:
             "non_core_top_level_candidates": non_core_candidates,
         },
         "cron": cron,
-        "findings": [asdict(f) for f in findings],
+        "findings": [asdict(finding) for finding in findings],
         "summary": {
-            "critical": sum(1 for f in findings if f.severity == "critical"),
-            "warning": sum(1 for f in findings if f.severity == "warning"),
-            "info": sum(1 for f in findings if f.severity == "info"),
+            "critical": sum(1 for finding in findings if finding.severity == "critical"),
+            "warning": sum(1 for finding in findings if finding.severity == "warning"),
+            "info": sum(1 for finding in findings if finding.severity == "info"),
             "plugin_count": len(plugin_inventory),
             "custom_plugin_count": custom_plugin_count,
             "configured_custom_code_count": len(custom_inventory),
             "non_core_top_level_candidate_count": len(non_core_candidates),
         },
     }
-    return payload

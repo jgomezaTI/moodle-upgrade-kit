@@ -44,10 +44,16 @@ plugins:
     - blocks/examplecustom
 
 custom_code:
-  # Arbitrary application/integration directories living under moodle.root.
-  # Inventory reads metadata only; compatibility analysis can inspect code later.
+  # Paths are resolved relative to moodle.root. Parent-relative paths are allowed
+  # when the resolved target remains inside the Git repository root.
+  # Example layout:
+  #   project/
+  #   ├── public_html/   <- moodle.root
+  #   │   └── portal_v3/
+  #   └── autonomina/
   paths:
     - portal_v3
+    - ../autonomina
   auto_detect_top_level: true
   max_files_per_path: 50000
 

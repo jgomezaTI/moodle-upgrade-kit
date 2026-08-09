@@ -2,7 +2,7 @@
 name: moodle.inventory
 description: Detect and record the instance identity and operational prerequisites: Moodle version/root, PHP, DB type, Git state, installed plugins, non-core code, disk usage, cron and key paths.
 effect: read-only
-version: 0.3.0
+version: 0.3.1
 ---
 
 # moodle.inventory
@@ -20,7 +20,7 @@ Detect and record the instance identity and operational prerequisites: Moodle ve
 - Environment YAML config
 - Read access to Moodle root and relevant system commands
 - Optional Docker runtime target when Moodle executes inside a container
-- Optional explicit custom plugin paths and arbitrary custom code paths such as `portal_v3`
+- Optional explicit custom plugin paths and arbitrary custom code paths such as `portal_v3` or `../autonomina`
 
 ## Outputs
 
@@ -37,7 +37,7 @@ Detect and record the instance identity and operational prerequisites: Moodle ve
 4. Discover the Git repository from the Moodle source path using Git itself, including the case where `.git` is located in a parent directory; record repository root, branch, HEAD and dirty state.
 5. Capture disk free space for the host-visible Moodle root, moodledata and configured backup paths.
 6. Inventory configured plugin type roots. Parse plugin component/version/requires metadata when `version.php` exists. Treat `local/*` and explicitly configured plugin paths as custom; leave other plugins `unclassified` until they are compared with the matching Moodle core release.
-7. Inventory explicitly configured arbitrary code paths such as `portal_v3` using filesystem metadata only: existence, file/directory counts, aggregate size, common extensions and Git tracking state. Do not read file contents during inventory.
+7. Inventory explicitly configured arbitrary code paths using filesystem metadata only: existence, resolved path, scope, file/directory counts, aggregate size, common extensions and Git tracking state. Do not read file contents during inventory.
 8. Detect top-level directories outside the known Moodle core layout as `non_core_top_level_candidates`. This is a candidate list, not a compatibility verdict.
 9. When an optional database runtime container is configured, capture driver, container running state, image and database server binary version without credentials or database queries.
 10. Capture cron configuration and the presence of `admin/cli/cron.php` without executing cron.
@@ -48,7 +48,11 @@ Detect and record the instance identity and operational prerequisites: Moodle ve
 - Never claim a plugin is core solely because its directory name resembles a Moodle plugin. Matching against the exact Moodle release belongs to compatibility analysis.
 - `local/*` is considered project-specific/custom because Moodle core does not ship local plugins.
 - `plugins.custom_paths` may explicitly identify known non-core plugins in other plugin types.
-- `custom_code.paths` may point to arbitrary directories inside `moodle.root`, including legacy portals, integrations, report applications and scripts.
+- `custom_code.paths` is always resolved relative to `moodle.root`.
+- Parent-relative paths such as `../autonomina` are allowed when their resolved target remains inside the Git repository root discovered from `moodle.root`.
+- A custom path may never escape the discovered Git repository root. If no Git repository can be discovered, it may not escape `moodle.root`.
+- Absolute custom-code paths are rejected so the environment config remains portable and explicit about its relationship to the Moodle root.
+- Inventory records `scope: moodle` for targets inside `moodle.root` and `scope: project` for allowed sibling/parent-relative targets inside the repository.
 - `custom_code.auto_detect_top_level` may surface unknown top-level directories automatically. These entries are `non-core candidates` and require later review.
 - Inventory may count files and extensions but must not persist source-code contents.
 
