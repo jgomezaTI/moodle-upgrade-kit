@@ -1,0 +1,92 @@
+schema_version: "1.0"
+workflow:
+  id: moodle-upgrade
+  name: Moodle Upgrade
+  description: Guarded end-to-end Moodle upgrade workflow with evidence and human approval gates.
+  inputs:
+    config:
+      type: string
+      required: true
+      description: Path to the environment YAML config.
+    run_id:
+      type: string
+      required: true
+      description: Stable upgrade run identifier, e.g. UPG-2026-001.
+  steps:
+    - id: inventory
+      type: command
+      command: speckit.moodle.inventory
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }}"
+
+    - id: baseline
+      type: command
+      command: speckit.moodle.baseline
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }}"
+
+    - id: compatibility
+      type: command
+      command: speckit.moodle.compatibility
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }}"
+
+    - id: plugins
+      type: command
+      command: speckit.moodle.plugins
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }}"
+
+    - id: backup
+      type: command
+      command: speckit.moodle.backup
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }}"
+
+    - id: pre-upgrade-review
+      type: gate
+      message: "Review inventory, baseline, compatibility, plugins and backup evidence. Approve only if blockers are resolved."
+      options: [approve, reject]
+      on_reject: abort
+
+    - id: upgrade
+      type: command
+      command: speckit.moodle.upgrade
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --approved"
+
+    - id: post-endpoints
+      type: command
+      command: speckit.moodle.endpoints
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --phase after"
+
+    - id: post-logs
+      type: command
+      command: speckit.moodle.logs
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --phase after"
+
+    - id: post-database
+      type: command
+      command: speckit.moodle.database
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --phase after"
+
+    - id: validate
+      type: command
+      command: speckit.moodle.validate
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }}"
+
+    - id: acceptance
+      type: gate
+      message: "Review post-upgrade validation. Approve acceptance, or reject and evaluate rollback."
+      options: [approve, reject]
+      on_reject: abort
+
+    - id: document
+      type: command
+      command: speckit.moodle.document
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }}"

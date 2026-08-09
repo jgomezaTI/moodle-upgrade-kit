@@ -1,0 +1,630 @@
+MOODLE UPGRADE KIT — SKILL CONTRACTS v0.1.0
+
+Fuente técnica: skills/moodle.<name>/SKILL.md
+
+================================================================================
+---
+name: moodle.inventory
+description: Detect and record the instance identity and operational prerequisites: Moodle version/root, PHP, DB type, Git state, installed plugins, disk usage, cron and key paths.
+effect: read-only
+version: 0.1.0
+---
+
+# moodle.inventory
+
+## Purpose
+
+Detect and record the instance identity and operational prerequisites: Moodle version/root, PHP, DB type, Git state, installed plugins, disk usage, cron and key paths.
+
+## Effect
+
+`read-only`
+
+## Inputs
+
+- Environment YAML config
+- Read access to Moodle root and relevant system commands
+
+## Outputs
+
+- `runs/<run-id>/inventory.json`
+- A blocker/warning summary
+
+## Procedure
+
+1. Resolve the instance root and prove it looks like Moodle (`version.php`, `config.php`, `admin/cli`).
+2. Capture Moodle release/build when readable without exposing secrets.
+3. Capture PHP CLI version and relevant extensions.
+4. Capture Git branch/HEAD/dirty state if the Moodle root is a repository.
+5. Capture disk free space for Moodle root, moodledata and backup paths.
+6. Inventory plugin directories and identify non-core/custom candidates.
+7. Capture cron/scheduled-task execution context when readable.
+8. Classify blockers separately from warnings. Never mutate the server.
+
+## Blocking conditions
+
+- Moodle root cannot be identified
+- Required path is inaccessible
+- Insufficient disk threshold if one is configured
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.baseline
+description: Capture the pre-upgrade functional state so the same critical behavior can be compared after the upgrade.
+effect: read-only
+version: 0.1.0
+---
+
+# moodle.baseline
+
+## Purpose
+
+Capture the pre-upgrade functional state so the same critical behavior can be compared after the upgrade.
+
+## Effect
+
+`read-only`
+
+## Inputs
+
+- Inventory result
+- Configured endpoints
+- Configured DB checks
+- Configured log sources
+
+## Outputs
+
+- `baseline-before.json` plus referenced component evidence
+
+## Procedure
+
+1. Require a successful inventory first.
+2. Run endpoint smoke checks.
+3. Run allow-listed database validation checks.
+4. Capture log error counts/patterns for the selected baseline window.
+5. Capture cron/scheduled-task status where available.
+6. Record timestamps and check definitions so post-upgrade comparison is like-for-like.
+
+## Blocking conditions
+
+- A critical baseline check cannot execute
+- The baseline is missing instance identity
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.compatibility
+description: Assess whether the current platform and code are compatible with the configured target Moodle version.
+effect: read-only
+version: 0.1.0
+---
+
+# moodle.compatibility
+
+## Purpose
+
+Assess whether the current platform and code are compatible with the configured target Moodle version.
+
+## Effect
+
+`read-only`
+
+## Inputs
+
+- Inventory
+- Target Moodle version
+- Plugin/custom-code inventory
+
+## Outputs
+
+- `compatibility.json`
+- Blocking requirements and manual review list
+
+## Procedure
+
+1. Compare PHP and database versions against a maintained target-version matrix.
+2. Identify removed/deprecated APIs relevant to custom code when evidence is available.
+3. Flag third-party plugins without a declared compatible version.
+4. Flag core modifications and unmanaged vendor changes.
+5. Distinguish proven incompatibility from unknown compatibility; unknown is never silently treated as compatible.
+
+## Blocking conditions
+
+- Unsupported PHP/DB version
+- Known incompatible plugin
+- Required compatibility evidence is unknown for a critical custom integration
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.plugins
+description: Review third-party plugins, local plugins and custom code that may break during a Moodle upgrade.
+effect: read-only
+version: 0.1.0
+---
+
+# moodle.plugins
+
+## Purpose
+
+Review third-party plugins, local plugins and custom code that may break during a Moodle upgrade.
+
+## Effect
+
+`read-only`
+
+## Inputs
+
+- Moodle root
+- Configured custom roots/ignore list
+
+## Outputs
+
+- `plugins.json`
+- Custom-code review candidates
+
+## Procedure
+
+1. Enumerate plugins by component/path and version metadata when available.
+2. Identify local/custom plugins and code living outside standard plugin boundaries.
+3. Detect uncommitted changes and direct core modifications where Git history can prove them.
+4. Search for configured high-risk API/table patterns without claiming compatibility from pattern absence alone.
+5. Produce a prioritized manual review list.
+
+## Blocking conditions
+
+- Known direct core modification with no migration plan
+- Critical custom plugin cannot be inventoried
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.endpoints
+description: Execute configurable HTTP/API smoke checks with stable IDs, expected status codes and timeouts.
+effect: read-only
+version: 0.1.0
+---
+
+# moodle.endpoints
+
+## Purpose
+
+Execute configurable HTTP/API smoke checks with stable IDs, expected status codes and timeouts.
+
+## Effect
+
+`read-only`
+
+## Inputs
+
+- Base URL
+- Endpoint definitions
+- Optional non-secret headers supplied at runtime
+
+## Outputs
+
+- `endpoints-before.json` or `endpoints-after.json`
+
+## Procedure
+
+1. Build URLs from configured base URL plus relative paths.
+2. Execute only configured methods; default to GET.
+3. Capture status, latency, redirect target and bounded response metadata.
+4. Never persist authentication tokens or full sensitive response bodies.
+5. Return non-zero/failed state when a critical expectation is not met.
+
+## Blocking conditions
+
+- Critical endpoint fails expected status
+- TLS/connection failure on a critical endpoint
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.logs
+description: Analyze configured Nginx/Apache, PHP, Moodle and cron log sources for new or material errors.
+effect: read-only
+version: 0.1.0
+---
+
+# moodle.logs
+
+## Purpose
+
+Analyze configured Nginx/Apache, PHP, Moodle and cron log sources for new or material errors.
+
+## Effect
+
+`read-only`
+
+## Inputs
+
+- Configured log files
+- Configured patterns
+- Time window or baseline marker
+
+## Outputs
+
+- `logs-before.json` or `logs-after.json`
+
+## Procedure
+
+1. Read only configured log sources.
+2. Count configured critical and warning patterns.
+3. Prefer comparing a bounded post-upgrade window to the baseline rather than scanning unlimited history.
+4. Redact secrets and avoid copying large raw logs into reports.
+5. Group repeated signatures to avoid inflating one root cause into many incidents.
+
+## Blocking conditions
+
+- New PHP fatal/uncaught errors associated with the upgrade
+- Critical web errors exceed configured threshold
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.database
+description: Execute only allow-listed validation SQL before and after the upgrade, preserving query identity and summarized results.
+effect: read-only by default
+version: 0.1.0
+---
+
+# moodle.database
+
+## Purpose
+
+Execute only allow-listed validation SQL before and after the upgrade, preserving query identity and summarized results.
+
+## Effect
+
+`read-only by default`
+
+## Inputs
+
+- DB connection from environment/secret provider
+- Configured SQL check files
+
+## Outputs
+
+- `database-before.json` or `database-after.json`
+
+## Procedure
+
+1. Load connection values from environment variables; never from committed passwords.
+2. Read SQL only from allow-listed files declared in configuration.
+3. Reject mutation keywords for validation checks unless an explicitly separate migration path is approved.
+4. Capture row counts and bounded sample results needed for evidence.
+5. Compare the same checks pre/post when possible.
+
+## Blocking conditions
+
+- A critical validation query fails
+- A validation file contains mutation statements
+- Connection credentials would be persisted in evidence
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.backup
+description: Verify that required backup components exist, are recent enough, and have enough metadata to support rollback planning.
+effect: read-only
+version: 0.1.0
+---
+
+# moodle.backup
+
+## Purpose
+
+Verify that required backup components exist, are recent enough, and have enough metadata to support rollback planning.
+
+## Effect
+
+`read-only`
+
+## Inputs
+
+- Backup paths
+- Required components
+- Maximum age
+
+## Outputs
+
+- `backup.json`
+- Pass/block status
+
+## Procedure
+
+1. Enumerate configured backup locations without modifying them.
+2. Identify database, code and moodledata components as configured.
+3. Check timestamps against the maximum allowed age.
+4. Capture sizes/checksums when practical.
+5. Treat “file exists” as insufficient when required component identity or age cannot be proven.
+
+## Blocking conditions
+
+- Missing required component
+- Backup older than policy
+- Backup location inaccessible
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.upgrade
+description: Create and, only after explicit approval, execute a controlled Moodle upgrade sequence with evidence at each stage.
+effect: destructive / gated
+version: 0.1.0
+---
+
+# moodle.upgrade
+
+## Purpose
+
+Create and, only after explicit approval, execute a controlled Moodle upgrade sequence with evidence at each stage.
+
+## Effect
+
+`destructive / gated`
+
+## Inputs
+
+- Passing inventory/baseline/compatibility/backup checks
+- Approved target version
+- Explicit human gate
+
+## Outputs
+
+- `upgrade-plan.md`
+- `upgrade-result.json`
+
+## Procedure
+
+1. Refuse to proceed if mutation is disabled in configuration.
+2. Refuse to proceed if the environment identity does not match the configured mutation policy.
+3. Require successful backup verification and a clean/understood Git state.
+4. Generate the exact command plan before execution.
+5. Pause for explicit human approval.
+6. Enable maintenance mode using the configured command.
+7. Perform only the approved code/version transition.
+8. Run Moodle CLI upgrade non-interactively.
+9. Purge caches and run cron as configured.
+10. Disable maintenance mode only when the approved plan says it is safe.
+11. Persist exit codes/timestamps without secrets.
+
+## Blocking conditions
+
+- No human approval
+- Backup check failed
+- Compatibility blocker exists
+- Production mutation not explicitly enabled
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.validate
+description: Compare pre-upgrade and post-upgrade evidence and produce an explicit upgrade acceptance decision.
+effect: read-only
+version: 0.1.0
+---
+
+# moodle.validate
+
+## Purpose
+
+Compare pre-upgrade and post-upgrade evidence and produce an explicit upgrade acceptance decision.
+
+## Effect
+
+`read-only`
+
+## Inputs
+
+- Baseline before
+- Post-upgrade endpoint/log/DB/inventory evidence
+
+## Outputs
+
+- `validation.json`
+- Acceptance/rejection with reasons
+
+## Procedure
+
+1. Verify the post-upgrade instance identity and target version.
+2. Re-run the critical baseline checks.
+3. Compare endpoint results, log signatures, DB checks and scheduled-task evidence.
+4. Mark regressions separately from pre-existing issues.
+5. Reject validation when required evidence is missing rather than assuming success.
+
+## Blocking conditions
+
+- Any critical regression
+- Target version not confirmed
+- Required post-upgrade evidence missing
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.rollback
+description: Generate and, only after explicit approval, execute a rollback using verified backup evidence and a known restoration sequence.
+effect: destructive / gated
+version: 0.1.0
+---
+
+# moodle.rollback
+
+## Purpose
+
+Generate and, only after explicit approval, execute a rollback using verified backup evidence and a known restoration sequence.
+
+## Effect
+
+`destructive / gated`
+
+## Inputs
+
+- Failed validation or explicit rollback decision
+- Verified backup evidence
+- Explicit human gate
+
+## Outputs
+
+- `rollback-plan.md`
+- `rollback-result.json`
+
+## Procedure
+
+1. Never infer a restore command from filenames alone; use configured/approved restoration procedures.
+2. Identify the exact backup set and pre-upgrade Git/version state.
+3. Generate the restoration sequence before execution.
+4. Pause for explicit human approval.
+5. Keep the site in maintenance mode during restoration.
+6. Restore code, database and moodledata in the approved order.
+7. Run post-rollback validation before declaring recovery successful.
+
+## Blocking conditions
+
+- Backup set cannot be proven
+- No human approval
+- Restore procedure is incomplete or ambiguous
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+
+================================================================================
+---
+name: moodle.document
+description: Generate a technical evidence report and synchronize a human-readable upgrade summary to the configured Google Drive destination.
+effect: read/write artifacts
+version: 0.1.0
+---
+
+# moodle.document
+
+## Purpose
+
+Generate a technical evidence report and synchronize a human-readable upgrade summary to the configured Google Drive destination.
+
+## Effect
+
+`read/write artifacts`
+
+## Inputs
+
+- Run evidence directory
+- Documentation configuration
+- Drive adapter/connector
+
+## Outputs
+
+- `final-report.md`
+- Updated/created Google Drive report
+
+## Procedure
+
+1. Load only structured run evidence and bounded approved excerpts.
+2. Redact configured sensitive patterns.
+3. Summarize result, blockers, warnings, commands, timestamps and remediation.
+4. Link technical findings to stable check IDs.
+5. Do not rewrite a failed check as success.
+6. If Drive synchronization fails, keep the local final report and mark sync as failed rather than losing technical evidence.
+
+## Blocking conditions
+
+- Evidence contains unredacted secrets
+- Report would claim completion despite failed validation
+
+## Universal rules
+
+- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
+- Preserve the run ID in every generated artifact.
+- Distinguish `critical`, `warning` and `info` findings.
+- Do not claim a check passed if it did not execute.
+- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+
+

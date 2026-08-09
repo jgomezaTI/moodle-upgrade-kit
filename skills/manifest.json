@@ -1,0 +1,22 @@
+{
+  "skills": [
+    "moodle.inventory",
+    "moodle.baseline",
+    "moodle.compatibility",
+    "moodle.plugins",
+    "moodle.endpoints",
+    "moodle.logs",
+    "moodle.database",
+    "moodle.backup",
+    "moodle.upgrade",
+    "moodle.validate",
+    "moodle.rollback",
+    "moodle.document"
+  ],
+  "count": 12,
+  "version": "0.1.0",
+  "destructive": [
+    "moodle.upgrade",
+    "moodle.rollback"
+  ]
+}

@@ -1,0 +1,95 @@
+project:
+  name: example-moodle
+  environment: staging
+  timezone: America/Santiago
+
+moodle:
+  root: /var/www/example/public_html
+  moodledata: /var/www/example/moodledata
+  base_url: https://moodle.example.invalid
+  target_version: "5.0"
+  maintenance_mode_command: "php admin/cli/maintenance.php --enable"
+  maintenance_off_command: "php admin/cli/maintenance.php --disable"
+  upgrade_command: "php admin/cli/upgrade.php --non-interactive"
+  purge_caches_command: "php admin/cli/purge_caches.php"
+  cron_command: "php admin/cli/cron.php"
+
+safety:
+  allow_mutation: false
+  require_environment: staging
+  require_clean_git: true
+  require_backup_check: true
+  require_human_gate: true
+  max_backup_age_hours: 24
+
+endpoints:
+  - id: login
+    method: GET
+    path: /login/index.php
+    expected_status: 200
+    timeout_seconds: 15
+  - id: homepage
+    method: GET
+    path: /
+    expected_status: 200
+    timeout_seconds: 15
+
+logs:
+  files:
+    - /var/log/nginx/error.log
+    - /var/log/php/error.log
+  patterns:
+    critical:
+      - "PHP Fatal error"
+      - "Uncaught Error"
+      - "Allowed memory size"
+      - "upstream sent too big header"
+    warning:
+      - "PHP Warning"
+      - "PHP Deprecated"
+      - " 500 "
+
+plugins:
+  custom_roots:
+    - local
+    - report
+    - blocks
+    - mod
+    - auth
+  ignore:
+    - mod/forum
+
+backup:
+  paths:
+    - /backups/moodle
+  required_components:
+    - database
+    - code
+    - moodledata
+
+database:
+  driver: mysql
+  # Do not store passwords here. Use environment variables or an approved secret provider.
+  connection_env:
+    host: MOODLE_DB_HOST
+    port: MOODLE_DB_PORT
+    database: MOODLE_DB_NAME
+    user: MOODLE_DB_USER
+    password: MOODLE_DB_PASSWORD
+  checks:
+    - id: duplicate_emails
+      severity: critical
+      sql_file: sql/checks/duplicate_emails.sql
+    - id: failed_scheduled_tasks
+      severity: warning
+      sql_file: sql/checks/failed_scheduled_tasks.sql
+
+documentation:
+  provider: google-drive
+  folder_id: null
+  document_id: null
+  include_raw_logs: false
+  redact_patterns:
+    - "password"
+    - "token"
+    - "secret"

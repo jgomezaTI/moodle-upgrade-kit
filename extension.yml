@@ -1,0 +1,76 @@
+schema_version: "1.0"
+extension:
+  id: "moodle"
+  name: "Moodle Upgrade Kit"
+  version: "0.1.0"
+  description: "Guarded Moodle upgrade diagnostics, execution planning, validation, rollback and evidence generation."
+  author: "Javier / Moodle Upgrade Kit contributors"
+  license: "MIT"
+  category: "process"
+  effect: "read-write"
+
+requires:
+  speckit_version: ">=0.10.0"
+  tools:
+    - name: "git"
+      version: ">=2.30"
+      required: true
+    - name: "python"
+      version: ">=3.11"
+      required: true
+    - name: "php"
+      required: false
+    - name: "bash"
+      version: ">=4.0"
+      required: false
+
+provides:
+  commands:
+    - name: "speckit.moodle.inventory"
+      file: "commands/speckit.moodle.inventory.md"
+      description: "Run the moodle.inventory capability."
+    - name: "speckit.moodle.baseline"
+      file: "commands/speckit.moodle.baseline.md"
+      description: "Run the moodle.baseline capability."
+    - name: "speckit.moodle.compatibility"
+      file: "commands/speckit.moodle.compatibility.md"
+      description: "Run the moodle.compatibility capability."
+    - name: "speckit.moodle.plugins"
+      file: "commands/speckit.moodle.plugins.md"
+      description: "Run the moodle.plugins capability."
+    - name: "speckit.moodle.endpoints"
+      file: "commands/speckit.moodle.endpoints.md"
+      description: "Run the moodle.endpoints capability."
+    - name: "speckit.moodle.logs"
+      file: "commands/speckit.moodle.logs.md"
+      description: "Run the moodle.logs capability."
+    - name: "speckit.moodle.database"
+      file: "commands/speckit.moodle.database.md"
+      description: "Run the moodle.database capability."
+    - name: "speckit.moodle.backup"
+      file: "commands/speckit.moodle.backup.md"
+      description: "Run the moodle.backup capability."
+    - name: "speckit.moodle.upgrade"
+      file: "commands/speckit.moodle.upgrade.md"
+      description: "Run the moodle.upgrade capability."
+    - name: "speckit.moodle.validate"
+      file: "commands/speckit.moodle.validate.md"
+      description: "Run the moodle.validate capability."
+    - name: "speckit.moodle.rollback"
+      file: "commands/speckit.moodle.rollback.md"
+      description: "Run the moodle.rollback capability."
+    - name: "speckit.moodle.document"
+      file: "commands/speckit.moodle.document.md"
+      description: "Run the moodle.document capability."
+  config:
+    - name: "moodle-config.yml"
+      template: "configs/example.yml"
+      description: "Instance-specific Moodle upgrade configuration."
+      required: false
+
+tags:
+  - "moodle"
+  - "upgrade"
+  - "operations"
+  - "validation"
+  - "rollback"
