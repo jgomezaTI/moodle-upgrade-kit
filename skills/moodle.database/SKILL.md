@@ -1,47 +1,47 @@
 ---
 name: moodle.database
-description: Execute only allow-listed validation SQL before and after the upgrade, preserving query identity and summarized results.
-effect: read-only by default
-version: 0.1.0
+description: Execute only configured read-only validation SQL and preserve bounded, credential-free evidence before or after an upgrade.
+effect: read-only
+version: 0.2.0
 ---
 
 # moodle.database
 
 ## Purpose
 
-Execute only allow-listed validation SQL before and after the upgrade, preserving query identity and summarized results.
-
-## Effect
-
-`read-only by default`
+Run explicit database validation checks without allowing validation SQL to become a mutation path.
 
 ## Inputs
 
-- DB connection from environment/secret provider
-- Configured SQL check files
+- Database driver
+- Environment-variable names for connection values
+- Optional Docker DB container
+- Allow-listed SQL files and expected result semantics
 
 ## Outputs
 
-- `database-before.json` or `database-after.json`
+- `runs/<run-id>/database-before.json` or `database-after.json`
+- Per-check execution/result metadata and bounded sample rows
 
 ## Procedure
 
-1. Load connection values from environment variables; never from committed passwords.
-2. Read SQL only from allow-listed files declared in configuration.
-3. Reject mutation keywords for validation checks unless an explicitly separate migration path is approved.
-4. Capture row counts and bounded sample results needed for evidence.
-5. Compare the same checks pre/post when possible.
+1. Load credential values only from environment variables named in configuration.
+2. Accept SQL only from configured files.
+3. Strip comments/literals for policy inspection and reject multiple statements or mutation keywords.
+4. Permit only validation statement families such as SELECT/SHOW/EXPLAIN/DESCRIBE/WITH.
+5. Execute through the local DB client or configured Docker container without placing password values in argv/evidence.
+6. Evaluate configured expectations (`empty`, `nonempty`, `any`).
+7. Persist row count and a bounded sample, never connection credentials.
 
 ## Blocking conditions
 
-- A critical validation query fails
-- A validation file contains mutation statements
-- Connection credentials would be persisted in evidence
+- Critical check cannot execute
+- Validation SQL is not provably read-only
+- Critical expectation fails
+- Required connection environment is missing for a critical check
 
 ## Universal rules
 
-- Never print or persist passwords, private keys, bearer tokens, session cookies or DB DSNs containing credentials.
-- Preserve the run ID in every generated artifact.
-- Distinguish `critical`, `warning` and `info` findings.
-- Do not claim a check passed if it did not execute.
-- Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
+- Database validation is read-only.
+- Never embed passwords/tokens in YAML, command arguments or evidence.
+- Keep check IDs stable for before/after comparison and regression tracking.
