@@ -11,6 +11,7 @@ DEFAULT_EXTENSIONS = {".php", ".inc", ".sql", ".js", ".mustache"}
 DEFAULT_EXCLUDE_DIRS = {".git", "vendor", "node_modules", ".venv", "moodledata"}
 PHP_SOURCE_EXTENSIONS = (".php", ".inc")
 SQL_AWARE_EXTENSIONS = (".php", ".inc", ".sql")
+PHP_CODE_VIEW = "php-code"
 
 
 @dataclass
@@ -29,6 +30,7 @@ RISK_PATTERNS: tuple[dict[str, Any], ...] = (
         "regex": r"\bmysql_(?:query|connect|pconnect|select_db|real_escape_string|fetch_[a-z_]+)\s*\(",
         "min_target": "4.1",
         "extensions": PHP_SOURCE_EXTENSIONS,
+        "source_view": PHP_CODE_VIEW,
         "message": "Legacy mysql_* API is removed from modern PHP.",
     },
     {
@@ -37,6 +39,7 @@ RISK_PATTERNS: tuple[dict[str, Any], ...] = (
         "regex": r"\b(?:ereg|eregi)\s*\(",
         "min_target": "4.1",
         "extensions": PHP_SOURCE_EXTENSIONS,
+        "source_view": PHP_CODE_VIEW,
         "message": "ereg()/eregi() are removed from modern PHP.",
     },
     {
@@ -45,6 +48,7 @@ RISK_PATTERNS: tuple[dict[str, Any], ...] = (
         "regex": r"\b(?:split|spliti)\s*\(",
         "min_target": "4.1",
         "extensions": PHP_SOURCE_EXTENSIONS,
+        "source_view": PHP_CODE_VIEW,
         "message": "split()/spliti() are removed from modern PHP.",
     },
     {
@@ -53,6 +57,7 @@ RISK_PATTERNS: tuple[dict[str, Any], ...] = (
         "regex": r"\beach\s*\(",
         "min_target": "4.1",
         "extensions": PHP_SOURCE_EXTENSIONS,
+        "source_view": PHP_CODE_VIEW,
         "message": "each() is incompatible with PHP 8 and should be migrated.",
     },
     {
@@ -61,6 +66,7 @@ RISK_PATTERNS: tuple[dict[str, Any], ...] = (
         "regex": r"\bcreate_function\s*\(",
         "min_target": "4.1",
         "extensions": PHP_SOURCE_EXTENSIONS,
+        "source_view": PHP_CODE_VIEW,
         "message": "create_function() is incompatible with PHP 8 and should be migrated.",
     },
     {
@@ -69,6 +75,7 @@ RISK_PATTERNS: tuple[dict[str, Any], ...] = (
         "regex": r"\bcron_run_single_task\s*\(",
         "min_target": "4.1",
         "extensions": PHP_SOURCE_EXTENSIONS,
+        "source_view": PHP_CODE_VIEW,
         "message": "cron_run_single_task() was finally deprecated for Moodle 4.1 and requires migration.",
     },
     {
@@ -77,6 +84,7 @@ RISK_PATTERNS: tuple[dict[str, Any], ...] = (
         "regex": r"\bget_module_metadata\s*\(",
         "min_target": "4.1",
         "extensions": PHP_SOURCE_EXTENSIONS,
+        "source_view": PHP_CODE_VIEW,
         "message": "get_module_metadata() was finally deprecated for Moodle 4.1 and requires migration.",
     },
     {
@@ -85,6 +93,7 @@ RISK_PATTERNS: tuple[dict[str, Any], ...] = (
         "regex": r"\badmin_setting_managelicenses\b",
         "min_target": "4.1",
         "extensions": PHP_SOURCE_EXTENSIONS,
+        "source_view": PHP_CODE_VIEW,
         "message": "admin_setting_managelicenses was finally deprecated for Moodle 4.1 and requires migration.",
     },
     {
@@ -137,6 +146,112 @@ def _iter_source_files(root: Path, max_files: int, extensions: set[str], exclude
             return
 
 
+def _php_executable_view(text: str) -> str:
+    """Mask non-executable PHP regions while preserving line positions.
+
+    PHP files commonly contain inline HTML and JavaScript. Removed-PHP-API
+    patterns must inspect only executable PHP code and must not match comments,
+    string literals or heredoc/nowdoc contents. The masked view keeps newlines so
+    evidence line numbers continue to refer to the original source file.
+    """
+    masked = [char if char in "\r\n" else " " for char in text]
+    state = "inline-html"
+    quote = ""
+    heredoc_label: str | None = None
+    index = 0
+
+    while index < len(text):
+        if state == "inline-html":
+            if text.startswith("<?=", index):
+                state = "code"
+                index += 3
+                continue
+            if text[index:index + 5].lower() == "<?php":
+                state = "code"
+                index += 5
+                continue
+            if text.startswith("<?", index) and text[index:index + 5].lower() != "<?xml":
+                state = "code"
+                index += 2
+                continue
+            index += 1
+            continue
+
+        if state == "code":
+            if text.startswith("?>", index):
+                state = "inline-html"
+                index += 2
+                continue
+            if text.startswith("//", index):
+                state = "line-comment"
+                index += 2
+                continue
+            if text.startswith("/*", index):
+                state = "block-comment"
+                index += 2
+                continue
+            if text[index] == "#" and not text.startswith("#[", index):
+                state = "line-comment"
+                index += 1
+                continue
+            if text[index] in {"'", '"', "`"}:
+                quote = text[index]
+                state = "string"
+                index += 1
+                continue
+            if text.startswith("<<<", index):
+                match = re.match(r"<<<[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\r\n]*(?:\r\n|\r|\n)", text[index:])
+                if match:
+                    heredoc_label = match.group(2)
+                    state = "heredoc"
+                    index += match.end()
+                    continue
+            masked[index] = text[index]
+            index += 1
+            continue
+
+        if state == "line-comment":
+            if text.startswith("?>", index):
+                state = "inline-html"
+                index += 2
+                continue
+            if text[index] in "\r\n":
+                state = "code"
+            index += 1
+            continue
+
+        if state == "block-comment":
+            if text.startswith("*/", index):
+                state = "code"
+                index += 2
+                continue
+            index += 1
+            continue
+
+        if state == "string":
+            if text[index] == "\\":
+                index += min(2, len(text) - index)
+                continue
+            if text[index] == quote:
+                state = "code"
+            index += 1
+            continue
+
+        if state == "heredoc":
+            line_end = index
+            while line_end < len(text) and text[line_end] not in "\r\n":
+                line_end += 1
+            line = text[index:line_end]
+            if heredoc_label and re.fullmatch(rf"[ \t]*{re.escape(heredoc_label)};?[ \t]*", line):
+                state = "code"
+                heredoc_label = None
+            index = line_end
+            if index < len(text):
+                index += 2 if text.startswith("\r\n", index) else 1
+
+    return "".join(masked)
+
+
 def _scan_path(root: Path, display_root: Path, target_version: str, max_files: int, max_bytes: int, patterns: tuple[dict[str, Any], ...]) -> tuple[list[dict], dict]:
     hits: list[dict[str, Any]] = []
     scanned_files = 0
@@ -153,14 +268,19 @@ def _scan_path(root: Path, display_root: Path, target_version: str, max_files: i
         text = raw.decode("utf-8", errors="ignore")
         rel = str(file_path.relative_to(display_root)) if file_path.is_relative_to(display_root) else str(file_path)
         suffix = file_path.suffix.lower()
-        for lineno, line in enumerate(text.splitlines(), start=1):
+        source_lines = text.splitlines()
+        php_code_lines = _php_executable_view(text).splitlines() if suffix in PHP_SOURCE_EXTENSIONS else []
+        for lineno, line in enumerate(source_lines, start=1):
             for pattern in patterns:
                 if not _at_least(target_version, pattern["min_target"]):
                     continue
                 allowed_extensions = pattern.get("extensions")
                 if allowed_extensions and suffix not in allowed_extensions:
                     continue
-                if re.search(pattern["regex"], line, flags=re.IGNORECASE):
+                candidate_line = line
+                if pattern.get("source_view") == PHP_CODE_VIEW:
+                    candidate_line = php_code_lines[lineno - 1] if lineno <= len(php_code_lines) else ""
+                if re.search(pattern["regex"], candidate_line, flags=re.IGNORECASE):
                     hits.append({"id": pattern["id"], "severity": pattern["severity"], "path": rel, "line": lineno, "message": pattern["message"]})
     return hits, {"scanned_files": scanned_files, "truncated_files": truncated_files, "max_files": max_files, "max_bytes_per_file": max_bytes}
 
