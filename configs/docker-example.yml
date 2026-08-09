@@ -29,12 +29,33 @@ inventory:
   min_free_gb: 5
 
 plugins:
+  # Plugin type roots to enumerate. Entries are not assumed to be custom just
+  # because their type root is listed here.
   custom_roots:
     - local
     - report
     - blocks
     - mod
     - auth
+  # Explicit non-core plugins known by the project. local/* is classified as
+  # custom automatically because Moodle core does not ship local plugins.
+  custom_paths:
+    - auth/examplecustom
+    - blocks/examplecustom
+
+custom_code:
+  # Arbitrary application/integration directories living under moodle.root.
+  # Inventory reads metadata only; compatibility analysis can inspect code later.
+  paths:
+    - portal_v3
+  auto_detect_top_level: true
+  max_files_per_path: 50000
 
 backup:
   paths: []
+
+database:
+  driver: mysql
+  # Optional Docker DB container. No DB credentials are required for inventory;
+  # only Docker image/running state and the server binary version are inspected.
+  runtime_container: moodle-db-1
