@@ -295,7 +295,12 @@ def cmd_record_qa(args):
 def cmd_record_document_sync(args):
     cfg = load_config(args.config)
     rd = run_dir(args.run_id)
-    result = record_document_sync(cfg, _read_input_json(args.input))
+    document_result = _read_optional(rd, "document-result.json") or {}
+    result = record_document_sync(
+        cfg,
+        _read_input_json(args.input),
+        expected_publication=document_result.get("publication"),
+    )
     write_json(rd / "document-sync.json", result)
     _json_print(result)
     return 0 if result["summary"]["complete"] else 3

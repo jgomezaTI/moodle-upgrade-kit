@@ -1,5 +1,5 @@
 ---
-description: "Run or resume the complete guarded Moodle upgrade lifecycle with repository agents, QA, evidence, and Drive documentation."
+description: "Run or resume the guarded Moodle lifecycle with authorized fixes, no automatic commits, QA, evidence, and findings-focused Drive documentation."
 ---
 
 # upgrade-moodle
@@ -8,4 +8,4 @@ Use the bundled `$upgrade-moodle` skill and treat the remaining invocation text 
 
 $ARGUMENTS
 
-Continue autonomously through every permitted step. Pause only for a machine/external blocker or an explicit gate required by the skill. Never infer an approval, enable mutation, or invent upgrade/rollback commands.
+Continue autonomously through every permitted step. Apply local fixes only after explicit scoped approval. Pause for machine/external blockers and required gates. Never infer approval, invent commands, or create/publish Git commits.

@@ -193,7 +193,9 @@ The repository packages a local Codex plugin under `plugins/moodle-upgrade-kit`.
 /upgrade-moodle
 ```
 
-Optional invocation text may supply a config path, run ID, workflow or approval for the current named gate. The skill runs/resumes the deterministic agent workflow, inspects the code-review queue, coordinates functional QA, and verifies configured Google Drive documentation. It pauses when a required human decision or unresolved machine/external condition remains.
+Optional invocation text may supply a config path, run ID, workflow or approval for the current named gate. The skill runs/resumes the deterministic workflow, inspects code, and may apply a named local remediation batch after explicit approval. It never stages, commits or publishes inspected-project changes.
+
+For Google Drive, `documentation.summary_mode: findings-focused` publishes grouped warnings/errors, corrections, validation and residual risk. A completely clean accepted upgrade receives only a concise execution record rather than the full step-by-step narrative. Full structured evidence remains local under `runs/<run-id>/`.
 
 ### Start configured-code review
 
@@ -219,6 +221,6 @@ The repository itself remains the technical source of truth. `AGENTS.md` and `do
 
 ## Current real validation target
 
-The first real target is the Enaex Spanish LMS under WSL + Docker, currently documented as Moodle `3.11.18` → `4.1`. The observed PHP runtime is `5.6.40`; `moodle.compatibility` is expected to classify that as a blocker before any mutation is possible.
+The first real target is the Enaex Spanish LMS under WSL + Docker, currently documented as Moodle `3.11.18` → `4.1`. The refreshed PHP runtime is `7.4.33` and compatibility passes with two remaining platform warnings.
 
-The real read-only critical path has been exercised through backup and mutation-gate validation. Current blockers remain PHP compatibility, dirty LMS Git state, missing verified backup conventions, disabled mutation and missing environment-owned upgrade commands. The agent layer reports those blockers without attempting to resolve or bypass them.
+The real read-only critical path has been exercised through backup and mutation-gate validation. Current blockers are dirty LMS Git state, missing verified backup conventions, disabled mutation and missing environment-owned upgrade commands. The agent layer reports those blockers without bypassing them.

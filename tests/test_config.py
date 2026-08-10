@@ -174,3 +174,11 @@ def test_required_document_sync_needs_a_provider():
 
     with pytest.raises(ConfigError, match="provider"):
         validate_config(cfg)
+
+
+def test_documentation_summary_mode_is_bounded():
+    cfg = base_config()
+    cfg["documentation"] = {"summary_mode": "everything-always"}
+
+    with pytest.raises(ConfigError, match="summary_mode"):
+        validate_config(cfg)

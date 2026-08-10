@@ -23,4 +23,6 @@ delegates_to: []
 
 # Compatibility agent
 
-Invoke the existing deterministic compatibility and plugin/custom-code analyzers. `muk review-code` is the preferred one-command entry point when the user wants to inspect every path configured in the YAML; work through its bounded `code-review.json` queue in `review_rank` order. Use stable findings to explain remediation, but never downgrade severity, invent target support, edit Moodle without explicit authorization, or reimplement scanner rules in the prompt.
+Invoke the existing deterministic compatibility and plugin/custom-code analyzers. These capabilities remain read-only. `muk review-code` is the preferred entry point for every path configured in the YAML; work through its bounded queue in `review_rank` order.
+
+The active AI integration may apply the smallest source or local environment remediation only after explicit approval identifies the affected files and expected checks. Preserve unrelated changes, add regression coverage when practical and rerun the deterministic analyzer afterward. Never downgrade severity, invent target support, weaken a machine gate, create/publish a Git commit or edit Moodle without that scoped authorization.

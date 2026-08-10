@@ -2,7 +2,7 @@ schema_version: "1.0"
 extension:
   id: "moodle"
   name: "Moodle Upgrade Kit"
-  version: "0.3.0"
+  version: "0.3.1"
   description: "Guarded Moodle upgrade diagnostics, execution planning, validation, rollback and evidence generation."
   author: "Javier / Moodle Upgrade Kit contributors"
   license: "MIT"

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 - 2026-08-10
+
+- Allowed `/upgrade-moodle` to apply explicitly approved local source and environment remediations while keeping deterministic analysis read-only.
+- Prohibited automatic Git staging, commits, branches, pushes and PRs during the Moodle upgrade workflow.
+- Added a findings-focused Drive publication policy: detailed grouped outcomes for warnings/errors and a concise record for clean upgrades.
+- Added machine-validated documentation publication scope and issue-count metadata.
+
 ## 0.3.0 - 2026-08-09
 
 - Added the installable Codex plugin and `/upgrade-moodle` chat entry point.

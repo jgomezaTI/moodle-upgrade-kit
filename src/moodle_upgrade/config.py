@@ -209,6 +209,8 @@ def validate_config(data: dict[str, Any]) -> None:
         raise ConfigError("documentation.require_sync must be a boolean")
     if documentation.get("require_sync", False) and not documentation.get("provider"):
         raise ConfigError("documentation.provider is required when synchronization is required")
+    if documentation.get("summary_mode", "findings-focused") not in {"findings-focused", "full"}:
+        raise ConfigError("documentation.summary_mode must be findings-focused or full")
 
     forbidden_fragments = ("password=", "token=", "secret=")
     serialized = repr(data).lower()

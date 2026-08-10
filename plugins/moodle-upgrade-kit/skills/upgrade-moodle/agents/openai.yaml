@@ -1,4 +1,4 @@
 interface:
   display_name: "Moodle Upgrade Orchestrator"
-  short_description: "Run the guarded Moodle upgrade lifecycle"
-  default_prompt: "Use $upgrade-moodle to run the configured Moodle upgrade workflow end to end."
+  short_description: "Guarded upgrades with approved fixes"
+  default_prompt: "Use $upgrade-moodle to run the guarded lifecycle, apply only approved fixes, create no commits, and publish findings-focused Drive results."

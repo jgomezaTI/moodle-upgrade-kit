@@ -8,7 +8,7 @@ Read this after `AGENTS.md` and before making changes.
 
 ## Current goal
 
-The deterministic critical path, Spec Kit-style agent layer, autonomous guarded runner and Codex `/upgrade-moodle` entry point are implemented. Keep the real Enaex target blocked until its environment owners resolve the recorded platform, Git, backup and command prerequisites.
+The deterministic critical path, agent layer, autonomous guarded runner and `/upgrade-moodle` entry point are implemented. PHP compatibility now passes. Keep the real Enaex target blocked until its environment owners resolve Git, backup, mutation-policy and exact-command prerequisites.
 
 Do not enable mutation or infer operational commands.
 
@@ -26,7 +26,7 @@ Observed:
 Moodle: 3.11.18
 Target: 4.1
 PHP container: lms-enaex-espanol-php-1
-PHP: 5.6.40
+PHP: 7.4.33
 DB container: lms-enaex-espanol-db-1
 MySQL image/version: 8.0.41
 Git branch during validation: update
@@ -95,21 +95,20 @@ A real inventory defect where internal directories such as `blocks/classes` and 
 
 ### Compatibility
 
-The real compatibility run behaves correctly.
+The real compatibility run behaves correctly. It originally blocked PHP 5.6.40; the environment owner later recreated PHP/web from their already configured 7.4 images and the evidence was refreshed.
 
 Expected/current result:
 
 ```text
 upgrade path 3.11.18 → 4.1: PASS
 MySQL 8.0.41: PASS
-PHP 5.6.40 for target 4.1: CRITICAL BLOCKER
-PHP 5.6.40 for current Moodle 3.11: CRITICAL BLOCKER
-recommended extensions exif/sodium: warning
+PHP 7.4.33 for source/target: PASS
+recommended extension exif: warning
 max_input_vars=1000: warning
-compatible: false
+compatible: true
 ```
 
-The compatibility blocker is a successful safety outcome. Do not change PHP yet merely to make the check green.
+The PHP compatibility blocker is resolved. No upgrade command ran while refreshing this read-only evidence.
 
 ## Plugin/custom-code validation history
 
@@ -398,9 +397,9 @@ Validation: 80 tests pass. The real read-only run `ENAEX-CONFIGURED-CODE-REVIEW-
 
 ## Exact next step
 
-The framework agent layer is complete. The exact next critical-path work belongs to the real environment: its owners must resolve PHP compatibility, establish the required clean Git state, configure and verify real backup conventions, and declare the exact upgrade commands. Then rerun the read-only evidence and orchestrator before any mutation is considered.
+The framework agent layer is complete. PHP compatibility is resolved. The exact next critical-path work belongs to the real environment: its owners must establish the required clean Git state, configure and verify real backup conventions, declare the exact upgrade commands and deliberately enable mutation only when every prerequisite is ready.
 
-Do not change PHP merely to make compatibility green and do not run a real upgrade or rollback.
+Do not run a real upgrade or rollback while the remaining gates fail.
 
 ## Autonomous chat entry point
 
@@ -409,6 +408,8 @@ Framework `0.3.0` packages `plugins/moodle-upgrade-kit` and the `/upgrade-moodle
 QA is now a required post-validation/pre-acceptance artifact. Optional Drive publication becomes part of completion only when `documentation.provider` and `require_sync: true` are configured. Both external results must be recorded through `muk record-qa` or `muk record-document-sync`; neither may be hand-claimed from an exit code.
 
 Canonical validation for `0.3.0`: 98 tests pass. A read-only autonomous pass against the existing real V2 run preserved `safety.allow_mutation: false` and stopped on the already known PHP, Git, backup, mutation and exact-command blockers without executing upgrade or rollback.
+
+Framework `0.3.1` allows the active `/upgrade-moodle` chat integration to apply explicitly approved local remediation while the deterministic analyzers remain read-only. The workflow never creates or publishes Git commits. Drive synchronization is findings-focused: warnings/errors/corrections receive grouped detail, while a clean accepted upgrade receives only a concise record. `document-sync.json` records and validates that publication scope. Canonical validation passes with 102 tests.
 
 ## Safety invariants
 

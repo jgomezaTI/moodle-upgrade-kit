@@ -112,6 +112,8 @@ Responsibilities:
 - `runs/`: generated evidence; run artifacts are not source code and should remain ignored except placeholders.
 - `docs/`: human-facing architecture, rules, and project context.
 
+The chat integration may apply a user-approved local remediation and rerun the deterministic checks, but it never creates or publishes a Git commit. External documentation defaults to findings-focused output: detailed grouped issues when present and a concise record for a clean accepted upgrade.
+
 ## 5. Safety model
 
 The framework currently assumes:
@@ -191,7 +193,7 @@ PHP container:
 Current Moodle: 3.11.18
 Moodle branch: 311
 Upgrade target: 4.1
-PHP runtime: 5.6.40
+PHP runtime: 7.4.33 (refreshed after the original 5.6.40 validation)
 Database: MySQL 8.0.41 container image
 ```
 
@@ -447,10 +449,10 @@ On Ubuntu/WSL, the matching `python3.x-venv` package may need to be installed be
 The deterministic framework, Spec Kit-style agent layer and autonomous guarded runner are implemented. The immediate priority for the real Enaex target is **not** to run an upgrade; it is to resolve the recorded environment-owned blockers:
 
 ```text
-1. Upgrade PHP/runtime compatibility for both the current and target Moodle requirements.
-2. Establish the required clean Git state without discarding user work.
-3. Configure and verify explicit database/code/moodledata backup conventions.
-4. Configure exact environment-owned upgrade commands.
+1. Establish the required clean Git state without discarding user work.
+2. Configure and verify explicit database/code/moodledata backup conventions.
+3. Configure exact environment-owned upgrade commands.
+4. Deliberately enable mutation only after the remaining gates are ready.
 5. Re-run deterministic evidence and `muk orchestrate`; mutation remains forbidden until every machine gate and explicit human approval pass.
 ```
 

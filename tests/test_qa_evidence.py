@@ -146,6 +146,8 @@ def test_document_sync_requires_connector_verification():
         "resource_id": "doc_123",
         "url": "https://docs.google.com/document/d/doc_123",
         "verified": True,
+        "publication_scope": "concise-clean-success",
+        "published_issue_count": 0,
     })
     unverified = record_document_sync(_config(), {
         "schema_version": "1.0",
@@ -153,7 +155,40 @@ def test_document_sync_requires_connector_verification():
         "status": "complete",
         "resource_id": "doc_123",
         "verified": False,
+        "publication_scope": "findings-and-outcomes",
+        "published_issue_count": 3,
     })
 
     assert complete["summary"]["complete"] is True
+    assert complete["publication_scope"] == "concise-clean-success"
     assert unverified["summary"]["complete"] is False
+
+
+def test_document_sync_rejects_clean_scope_when_findings_were_published():
+    with pytest.raises(ValueError, match="findings-and-outcomes"):
+        record_document_sync(_config(), {
+            "schema_version": "1.0",
+            "provider": "google-drive",
+            "status": "complete",
+            "resource_id": "doc_123",
+            "verified": True,
+            "publication_scope": "concise-clean-success",
+            "published_issue_count": 2,
+        })
+
+
+def test_document_sync_must_match_deterministic_publication_scope():
+    with pytest.raises(ValueError, match="document-result"):
+        record_document_sync(
+            _config(),
+            {
+                "schema_version": "1.0",
+                "provider": "google-drive",
+                "status": "complete",
+                "resource_id": "doc_123",
+                "verified": True,
+                "publication_scope": "concise-clean-success",
+                "published_issue_count": 0,
+            },
+            expected_publication={"recommended_scope": "findings-and-outcomes"},
+        )

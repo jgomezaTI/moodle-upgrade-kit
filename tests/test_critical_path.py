@@ -276,3 +276,28 @@ def test_document_report_preserves_local_result_when_sync_pending(tmp_path):
     assert "Result: **PASS**" in markdown
     assert result["summary"]["report_generated"] is True
     assert result["sync"]["status"] == "external-adapter-required"
+    assert result["publication"]["recommended_scope"] == "concise-clean-success"
+
+
+def test_document_report_recommends_findings_focused_drive_scope(tmp_path):
+    cfg = config_fixture(tmp_path)
+    cfg["documentation"] = {
+        "provider": "google-drive",
+        "require_sync": True,
+        "summary_mode": "findings-focused",
+        "redact_patterns": [],
+    }
+    run = tmp_path / "RUN-WARNINGS"
+    run.mkdir()
+    (run / "validation.json").write_text(
+        json.dumps({"data": {
+            "summary": {"accepted": True},
+            "findings": [{"severity": "warning", "code": "QA_RESIDUAL", "message": "Review residual behavior."}],
+        }}),
+        encoding="utf-8",
+    )
+
+    _, result = generate_report(cfg, "RUN-WARNINGS", base_dir=tmp_path)
+
+    assert result["publication"]["recommended_scope"] == "findings-and-outcomes"
+    assert result["publication"]["structured_issue_count"] == 1

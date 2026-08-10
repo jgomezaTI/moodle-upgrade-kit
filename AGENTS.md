@@ -58,7 +58,7 @@ rollback gate
 → document
 ```
 
-The deterministic real-validation sequence is complete through baseline, backup blocking and upgrade precondition blocking. The Spec Kit-style agent layer is implemented. The next real critical-path work requires environment owners to resolve the recorded PHP, Git, backup and exact-command blockers before read-only evidence is rerun.
+The deterministic real-validation sequence is complete through baseline, backup blocking and upgrade precondition blocking. PHP compatibility now passes on 7.4.33. The next real critical-path work requires environment owners to resolve Git, backup, mutation-policy and exact-command blockers.
 
 ## Current real-validation facts
 
@@ -71,7 +71,7 @@ Kit repo:         /home/javier/proyectos/lms-enaex-espanol/moodle-upgrade-kit
 Moodle:           3.11.18
 Target:           4.1
 PHP container:    lms-enaex-espanol-php-1
-Observed PHP:     5.6.40
+Observed PHP:     7.4.33
 DB container:     lms-enaex-espanol-db-1
 Observed MySQL:   8.0.41
 ```
@@ -80,7 +80,7 @@ Observed MySQL:   8.0.41
 
 Relevant custom code for this target includes `portal_v3`, `blocks/resetcompletion`, `api`, `../scripts`, `../batch` and configured `../batch/*` integration paths.
 
-Inventory V2 is considered stable enough for this environment. Compatibility correctly blocks Moodle 3.11.18 → 4.1 because PHP 5.6.40 is unsupported.
+Inventory V2 is considered stable enough for this environment. After the PHP/web containers were recreated from the already configured 7.4 images, compatibility passes with PHP 7.4.33; `exif` and `max_input_vars=1000` remain warnings.
 
 Plugin scan scope, source-core classification and grouped risk evidence are validated. Baseline now requires executed endpoint/database/log coverage. The real backup gate is explicitly blocked because no operational convention is configured. See `docs/CODEX_HANDOFF.md` for exact evidence and current blockers.
 
@@ -165,6 +165,9 @@ ENAEX-311-TO-410-CRITICAL-PATH-V2
 - Keep agent contracts, capability ownership, deterministic orchestration and execution gates synchronized.
 - Use `muk review-code` / `speckit.moodle.review-code` as the one-command read-only entry point for reviewing YAML-configured custom-code paths; it must reuse `moodle.plugins` rather than introduce a second scanner.
 - Use `muk run-agents` as the deterministic multi-step executor. It must stop at human gates, external adapter work and blockers, and must never infer approval.
+- `/upgrade-moodle` may apply explicitly scoped local remediation through the active chat integration, but deterministic analysis stays read-only and evidence must be refreshed afterward.
+- `/upgrade-moodle` must never stage, commit, push, branch, tag or open a PR in the inspected Moodle project. Authorized edits remain visible for human review.
+- Findings-focused Drive publication must detail grouped warnings/errors and corrections; a clean accepted run receives only a concise execution record.
 
 ## Canonical checks
 
@@ -176,7 +179,7 @@ pytest
 python -m moodle_upgrade.cli validate-config --config configs/example.yml
 ```
 
-For the real Enaex environment, remain read-only until compatibility blockers are resolved and the user explicitly enables/gates mutation.
+For the real Enaex environment, remain read-only until every remaining machine blocker is resolved and the user explicitly enables/gates mutation.
 
 ## When starting a task
 

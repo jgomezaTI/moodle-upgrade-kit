@@ -183,6 +183,7 @@ documentation:
   folder_id: null
   document_id: null
   require_sync: false
+  summary_mode: findings-focused
   include_raw_logs: false
   redact_patterns:
     - "password"

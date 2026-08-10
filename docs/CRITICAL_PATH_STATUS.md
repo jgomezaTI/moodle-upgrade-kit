@@ -36,7 +36,7 @@ Moodle root:      /home/javier/proyectos/lms-enaex-espanol/public_html
 Kit repo:         /home/javier/proyectos/lms-enaex-espanol/moodle-upgrade-kit
 Moodle:           3.11.18
 Target:           4.1
-PHP:              5.6.40 in lms-enaex-espanol-php-1
+PHP:              7.4.33 in lms-enaex-espanol-php-1
 MySQL:            8.0.41 in lms-enaex-espanol-db-1
 ```
 
@@ -67,19 +67,18 @@ PR #7 converted a real false plugin-enumeration defect into regression coverage.
 
 ### Compatibility — validated behavior
 
-Current real result correctly blocks mutation:
+The original real result correctly blocked PHP 5.6.40. After the environment owner recreated the PHP/web containers from the already configured 7.4 images, read-only inventory and compatibility were refreshed. Current result:
 
 ```text
 upgrade path 3.11.18 → 4.1: PASS
 MySQL 8.0.41: PASS
-PHP 5.6.40 for Moodle 4.1: CRITICAL
-PHP 5.6.40 for current Moodle 3.11: CRITICAL
-exif/sodium recommended extensions: warning
+PHP 7.4.33: PASS
+exif recommended extension: warning
 max_input_vars=1000: warning
-compatible: false
+compatible: true
 ```
 
-This is expected safety behavior.
+No upgrade command ran during this remediation verification.
 
 ### Plugins/custom code — current gate
 
@@ -235,7 +234,7 @@ No upgrade CLI or configured upgrade sequence was run. Regression coverage uses 
 
 Do not rerun inventory or compatibility.
 
-1. Keep the real Enaex run blocked until environment owners resolve the recorded PHP, Git, backup and exact-command prerequisites.
+1. Keep the real Enaex run blocked until environment owners resolve the recorded Git, backup and exact-command prerequisites and deliberately enable mutation only when ready.
 2. Rerun the read-only evidence and agent decision only after those external conditions change.
 
 ## Deterministic validation sequence completed
@@ -268,7 +267,7 @@ documentation-agent
 
 The machine-validated registry gives every registered capability exactly one owner. The orchestrator is delegate-only; upgrade and rollback have exclusive separate owners. Decisions contain at most one `executes_automatically: false` action and reuse the same upgrade/rollback precondition evaluators as execution.
 
-The real agent decision is blocked by `MUTATION_DISABLED`, `GIT_NOT_CLEAN`, `COMPATIBILITY_NOT_PASSED`, `BACKUP_NOT_VERIFIED` and missing configured upgrade steps. This is expected and no destructive command executed.
+The refreshed real agent decision is blocked by `MUTATION_DISABLED`, `GIT_NOT_CLEAN`, `BACKUP_NOT_VERIFIED` and missing configured upgrade steps. PHP compatibility now passes; no destructive command executed.
 
 Framework `0.2.0` canonical validation passed with 77 tests, editable installation, example/local config validation and a real read-only orchestrator run. `agent-state.json` contains no obvious credential/raw-log fields and reports `next_action: null`.
 
@@ -278,7 +277,9 @@ Canonical validation passes with 80 tests. Real read-only execution under `ENAEX
 
 Framework `0.3.0` adds `muk run-agents`, `qa-agent`, validated QA/document-sync evidence and the installable Codex `/upgrade-moodle` entry point. The runner advances all permitted deterministic actions and stops at a blocker, human gate or external adapter; it never supplies approval. Canonical validation passes with 98 tests.
 
-Running it against the existing real V2 evidence remains safely blocked by `MUTATION_DISABLED`, `GIT_NOT_CLEAN`, `COMPATIBILITY_NOT_PASSED`, `BACKUP_NOT_VERIFIED` and the five missing environment-owned upgrade commands. No upgrade or rollback command executed.
+The latest real V2 decision is safely blocked by `MUTATION_DISABLED`, `GIT_NOT_CLEAN`, `BACKUP_NOT_VERIFIED` and the five missing environment-owned upgrade commands. `COMPATIBILITY_NOT_PASSED` was removed after PHP 7.4.33 evidence passed. No upgrade or rollback command executed.
+
+Framework `0.3.1` adds explicitly authorized chat-mediated remediation without making deterministic compatibility checks mutable. `/upgrade-moodle` creates no Git commit, and required Drive synchronization validates either `findings-and-outcomes` or `concise-clean-success` publication instead of copying every clean-run step. Canonical validation passes with 102 tests.
 
 ## Safety invariants
 

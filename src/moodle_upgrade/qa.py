@@ -140,11 +140,18 @@ def record_qa_result(config: dict[str, Any], payload: dict[str, Any]) -> dict[st
     }
 
 
-def record_document_sync(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+def record_document_sync(
+    config: dict[str, Any],
+    payload: dict[str, Any],
+    expected_publication: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Document sync input must be a JSON object")
     _assert_no_sensitive_data(payload)
-    allowed = {"schema_version", "provider", "status", "resource_id", "url", "verified"}
+    allowed = {
+        "schema_version", "provider", "status", "resource_id", "url", "verified",
+        "publication_scope", "published_issue_count",
+    }
     unknown = set(payload) - allowed
     if unknown:
         raise ValueError("Document sync input contains unsupported fields: " + ", ".join(sorted(unknown)))
@@ -154,6 +161,20 @@ def record_document_sync(config: dict[str, Any], payload: dict[str, Any]) -> dic
     configured_provider = str((config.get("documentation", {}) or {}).get("provider") or "")
     if provider != configured_provider:
         raise ValueError("Document sync provider does not match configuration")
+    publication_scope = _text(payload.get("publication_scope"), "publication_scope", max_length=80)
+    published_issue_count = payload.get("published_issue_count")
+    if isinstance(published_issue_count, bool) or not isinstance(published_issue_count, int) or published_issue_count < 0:
+        raise ValueError("published_issue_count must be a non-negative integer")
+    summary_mode = str((config.get("documentation", {}) or {}).get("summary_mode", "findings-focused"))
+    if summary_mode == "full":
+        required_scope = "full"
+    else:
+        required_scope = "concise-clean-success" if published_issue_count == 0 else "findings-and-outcomes"
+    if publication_scope != required_scope:
+        raise ValueError(f"publication_scope must be {required_scope} for the recorded issue count")
+    expected_scope = str((expected_publication or {}).get("recommended_scope") or "")
+    if expected_scope and publication_scope != expected_scope:
+        raise ValueError("publication_scope does not match document-result.json")
     status = _text(payload.get("status"), "status", max_length=40)
     if status not in {"complete", "failed"}:
         raise ValueError("Document sync status must be complete or failed")
@@ -182,6 +203,8 @@ def record_document_sync(config: dict[str, Any], payload: dict[str, Any]) -> dic
         "resource_id": resource_id or None,
         "url": url or None,
         "verified": verified,
+        "publication_scope": publication_scope,
+        "published_issue_count": published_issue_count,
         "findings": findings,
-        "summary": {"complete": complete},
+        "summary": {"complete": complete, "findings_focused": summary_mode == "findings-focused"},
     }

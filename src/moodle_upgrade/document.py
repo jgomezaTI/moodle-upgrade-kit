@@ -98,9 +98,30 @@ def generate_report(config: dict[str, Any], run_id: str, base_dir: str | Path = 
     lines.extend(["", "## Documentation synchronization", "", f"- Provider: `{provider}`", f"- Status: `{sync['status']}`", "", "The local report is authoritative technical evidence even if external synchronization is unavailable.", ""])
     markdown = _redact("\n".join(lines), [str(pattern) for pattern in docs_cfg.get("redact_patterns", [])])
     counts = Counter(f.severity for f in findings)
+    evidence_counts = Counter(
+        str(finding.get("severity", "unknown")).lower()
+        for _, finding in collected
+        if isinstance(finding, dict)
+    )
+    structured_issue_count = sum(evidence_counts[level] for level in ("critical", "error", "warning"))
+    summary_mode = docs_cfg.get("summary_mode", "findings-focused")
+    if summary_mode == "full":
+        publication_scope = "full"
+    elif overall == "PASS" and structured_issue_count == 0:
+        publication_scope = "concise-clean-success"
+    else:
+        publication_scope = "findings-and-outcomes"
     result = {
         "run_id": run_id, "overall": overall, "evidence_files": list(evidence), "sync": sync,
         "findings": [asdict(f) for f in findings],
+        "publication": {
+            "mode": summary_mode,
+            "recommended_scope": publication_scope,
+            "structured_issue_count": structured_issue_count,
+            "critical_count": evidence_counts["critical"],
+            "error_count": evidence_counts["error"],
+            "warning_count": evidence_counts["warning"],
+        },
         "summary": {"critical": counts["critical"], "warning": counts["warning"], "report_generated": True, "external_sync_complete": sync["status"] in {"not-configured", "complete"}},
     }
     return markdown, result

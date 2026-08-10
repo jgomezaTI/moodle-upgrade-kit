@@ -1,6 +1,6 @@
 {
   "name": "moodle-upgrade-kit",
-  "version": "0.3.0+codex.20260810034524",
+  "version": "0.3.1+codex.20260810040956",
   "description": "Run a guarded Moodle upgrade lifecycle from one Codex chat entry point.",
   "author": {
     "name": "Javier / Moodle Upgrade Kit contributors",
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Moodle Upgrade Kit",
-    "shortDescription": "Run guarded Moodle upgrades with QA and evidence",
-    "longDescription": "Starts the repository-defined Moodle agent workflow, advances deterministic read-only checks, pauses at mandatory gates, coordinates functional QA, and publishes verified documentation through connected tools.",
+    "shortDescription": "Guarded upgrades, fixes, QA, and Drive",
+    "longDescription": "Runs the Moodle agent workflow, applies explicitly authorized local remediation without automatic Git commits, preserves mandatory gates, coordinates QA, and publishes findings-focused verified documentation.",
     "developerName": "Moodle Upgrade Kit contributors",
     "category": "Developer Tools",
     "capabilities": [
@@ -28,7 +28,7 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Run the configured Moodle upgrade lifecycle and stop only at required gates or blockers."
+      "Run the Moodle upgrade lifecycle, apply only approved fixes, create no commits, and publish findings-focused Drive documentation."
     ]
   }
 }

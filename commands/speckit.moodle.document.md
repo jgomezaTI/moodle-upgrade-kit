@@ -21,3 +21,5 @@ Before acting:
 5. For any destructive capability, do not execute mutation unless the current workflow/run contains explicit human approval and configuration permits mutation.
 
 Execute the `moodle.document` contract and write its declared evidence artifact(s) under `runs/<run-id>/`.
+
+When external synchronization uses `findings-focused`, publish grouped warnings/errors and outcomes. Use `concise-clean-success` only when the accepted run has no findings; never copy the complete clean-run command narrative to Drive.

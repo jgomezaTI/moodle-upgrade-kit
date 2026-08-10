@@ -32,6 +32,8 @@ All registered capabilities have exactly one owner. The orchestrator has none. `
 
 This policy supplements Spec Kit workflows, which orchestrate commands and gates but do not themselves provide an operating-system capability sandbox. The actual upgrade and rollback implementations still re-evaluate every machine prerequisite and explicit approval before running configured argv-safe commands.
 
+The active chat integration may apply a specifically approved local remediation after a read-only finding. This does not make the deterministic compatibility capability mutable: the integration preserves unrelated changes, reruns the owning analyzer and cannot weaken a gate. `/upgrade-moodle` never stages, commits, pushes or opens a PR for inspected-project changes.
+
 ## Evidence ordering
 
 Upgrade selection follows:
@@ -68,7 +70,7 @@ muk run-agents \
   --agents-dir agents
 ```
 
-The run summary is stored in `agent-run.json`. QA and Google Drive remain environment-adapter actions because their browser/connector effects and evidence require the active chat integration; `muk record-qa` and `muk record-document-sync` validate their anonymized results before the workflow advances.
+The run summary is stored in `agent-run.json`. QA and Google Drive remain environment-adapter actions because their browser/connector effects and evidence require the active chat integration; `muk record-qa` and `muk record-document-sync` validate their anonymized results before the workflow advances. Document sync also validates the selected publication scope against `document-result.json`.
 
 Approval flags only tell the selector that a named human gate was satisfied. They do not enable mutation and are not forwarded automatically. The selected destructive capability still requires its own explicit CLI approval and all deterministic evidence.
 
@@ -80,4 +82,6 @@ The queue preserves deterministic severity and `review_rank`, includes only file
 
 ## Codex plugin
 
-`plugins/moodle-upgrade-kit` packages the `upgrade-moodle` skill and `/upgrade-moodle` command. The skill resolves the configured environment, calls `muk run-agents`, handles compatibility review and external QA/documentation adapters, and resumes until completion or a mandatory stop condition. It cannot weaken any deterministic gate.
+`plugins/moodle-upgrade-kit` packages the `upgrade-moodle` skill and `/upgrade-moodle` command. The skill resolves the environment, calls `muk run-agents`, handles approved local remediation and external QA/documentation adapters, and resumes until completion or a mandatory stop condition. It cannot weaken a deterministic gate or create a Git commit.
+
+With `documentation.summary_mode: findings-focused`, Drive receives grouped warnings/errors and outcomes when issues exist. A clean accepted run receives only a concise status record. The local report and structured artifacts retain the complete audit trail.

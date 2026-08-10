@@ -14,10 +14,14 @@ def test_codex_plugin_exposes_upgrade_moodle_skill_and_command():
     command = (PLUGIN / "commands" / "upgrade-moodle.md").read_text(encoding="utf-8")
 
     assert manifest["name"] == "moodle-upgrade-kit"
-    assert manifest["version"].startswith("0.3.0")
+    assert manifest["version"].startswith("0.3.1")
     assert "name: upgrade-moodle" in skill
     assert "/upgrade-moodle" in skill
     assert "$upgrade-moodle" in command
+    assert "Never create a commit" in skill
+    assert "concise-clean-success" in skill
+    assert "findings-and-outcomes" in skill
+    assert "published_issue_count" in skill
     assert "TODO" not in skill
 
 
