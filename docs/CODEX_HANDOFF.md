@@ -8,9 +8,9 @@ Read this after `AGENTS.md` and before making changes.
 
 ## Current goal
 
-Finish validating the deterministic critical path against the real Enaex WSL/Docker environment **before** implementing the agent layer or enabling mutation.
+The deterministic read-only critical path and the Spec Kit-style agent layer are implemented. Keep the real Enaex target blocked until its environment owners resolve the recorded platform, Git, backup and command prerequisites.
 
-Do not broaden scope. The current gate is `moodle.plugins`.
+Do not enable mutation or infer operational commands.
 
 ## Real environment
 
@@ -352,19 +352,9 @@ BACKUP_NOT_VERIFIED
 
 No `muk upgrade` command or configured upgrade command sequence was executed. A sentinel-runner regression test proves the upgrade runner is never called while those machine gates fail.
 
-## Exact next step
+## Agent layer — implemented
 
-1. Publish the focused backup evidence and machine-gate regression coverage.
-2. Design the Spec Kit-style agent contracts around existing deterministic capability/evidence contracts.
-3. Implement the seven agents with explicit capability permissions; upgrade/rollback agents must remain unable to bypass the existing machine and human gates.
-
-Do not change PHP merely to make compatibility green. Do not run upgrade, rollback or implement agents yet.
-
-## Agent layer — future work, not current gate
-
-The intended agent layer should orchestrate deterministic capabilities rather than reimplement their logic.
-
-Planned logical agents:
+Seven portable contracts are registered under `agents/`:
 
 ```text
 upgrade-orchestrator
@@ -376,9 +366,26 @@ rollback-agent
 documentation-agent
 ```
 
-The orchestrator should consume structured run evidence and select the next allowed capability. It must not invent compatibility verdicts or bypass machine gates.
+All 12 deterministic capabilities have one owner. `upgrade-orchestrator` is delegate-only and owns no capability; only `upgrade-agent` owns `moodle.upgrade`, and only `rollback-agent` owns `moodle.rollback`. `muk orchestrate` writes `agent-state.json` and never auto-executes its selected action.
 
-The deterministic read-only validation gates are now stable enough to begin this layer. Agent implementation must not attempt to resolve the real PHP, dirty-Git or missing-backup blockers and must keep `safety.allow_mutation: false`.
+The real Enaex agent-state validation returns `blocked` with the existing four machine blockers plus five missing environment-owned upgrade-command findings. No upgrade or rollback command was run.
+
+Canonical validation for framework version `0.2.0`:
+
+```text
+editable install: OK
+pytest: 77 passed
+validate-config configs/example.yml: OK
+validate-config real gitignored local config: OK
+real orchestrator: exit 3 / blocked / next_action null
+safety.allow_mutation: false
+```
+
+## Exact next step
+
+The framework agent layer is complete. The exact next critical-path work belongs to the real environment: its owners must resolve PHP compatibility, establish the required clean Git state, configure and verify real backup conventions, and declare the exact upgrade commands. Then rerun the read-only evidence and orchestrator before any mutation is considered.
+
+Do not change PHP merely to make compatibility green and do not run a real upgrade or rollback.
 
 ## Safety invariants
 
@@ -389,7 +396,7 @@ The deterministic read-only validation gates are now stable enough to begin this
 - Database validation remains read-only.
 - Preserve stable finding IDs.
 - Every real scanner/runtime defect should become a regression test.
-- Do not merge PRs unless the user explicitly asks.
+- Do not merge PRs or publish changes unless the user explicitly asks.
 
 ## Recommended first Codex CLI prompt
 
@@ -397,11 +404,9 @@ The deterministic read-only validation gates are now stable enough to begin this
 Read AGENTS.md, docs/CODEX_HANDOFF.md, docs/CRITICAL_PATH_STATUS.md,
 and skills/moodle.plugins/SKILL.md first.
 
-Then inspect the current Git branch, main, the deterministic risk-grouping
-development item, and the evidence under
+Then inspect the current Git branch, main, the agent contracts and the evidence under
 runs/ENAEX-311-TO-410-CRITICAL-PATH-V2 if present.
 
-Summarize what is already validated and identify the exact next step on the
-critical path. Do not modify anything yet. Do not broaden scope. Do not run
-upgrade or rollback commands.
+Run `muk orchestrate` only in read-only decision mode and summarize its blockers.
+Do not enable mutation or run upgrade/rollback commands.
 ```

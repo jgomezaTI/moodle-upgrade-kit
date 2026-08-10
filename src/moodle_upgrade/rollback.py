@@ -40,7 +40,11 @@ def render_rollback_plan(config: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _preconditions(config: dict[str, Any], approved: bool, backup: dict[str, Any] | None, validation: dict[str, Any] | None, force: bool) -> list[Finding]:
+def rollback_preconditions(
+    config: dict[str, Any], approved: bool, backup: dict[str, Any] | None,
+    validation: dict[str, Any] | None, force: bool,
+) -> list[dict[str, str]]:
+    """Return every deterministic rollback blocker without executing a command."""
     safety = config.get("safety", {}) or {}
     findings: list[Finding] = []
     if not safety.get("allow_mutation", False):
@@ -58,14 +62,6 @@ def _preconditions(config: dict[str, Any], approved: bool, backup: dict[str, Any
             findings.append(Finding("critical", "ROLLBACK_DECISION_REQUIRED", "Rejected validation evidence or --force is required to justify rollback."))
         elif validation.get("summary", {}).get("accepted", False):
             findings.append(Finding("critical", "ROLLBACK_VALIDATION_NOT_REJECTED", "Validation is accepted; use an explicit forced rollback decision if rollback is still required."))
-    return findings
-
-
-def execute_rollback(
-    config: dict[str, Any], approved: bool, backup: dict[str, Any] | None,
-    validation: dict[str, Any] | None, force: bool = False, runner: Callable[..., Any] | None = None,
-) -> dict[str, Any]:
-    findings = _preconditions(config, approved, backup, validation, force)
     steps = rollback_steps(config)
     restore_steps = [step for step in steps if step["id"] not in {"maintenance_on", "maintenance_off"}]
     if not restore_steps:
@@ -78,6 +74,15 @@ def execute_rollback(
                 command_argv(step["command"])
             except ValueError as exc:
                 findings.append(Finding("critical", "ROLLBACK_COMMAND_INVALID", f"{step['id']}: {exc}"))
+    return [asdict(f) for f in findings]
+
+
+def execute_rollback(
+    config: dict[str, Any], approved: bool, backup: dict[str, Any] | None,
+    validation: dict[str, Any] | None, force: bool = False, runner: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
+    findings = [Finding(**item) for item in rollback_preconditions(config, approved, backup, validation, force)]
+    steps = rollback_steps(config)
     if findings:
         counts = Counter(f.severity for f in findings)
         return {"approved": approved, "force": force, "executed": False, "steps": [], "findings": [asdict(f) for f in findings], "summary": {"critical": counts["critical"], "restored": False, "validation_required": True}}

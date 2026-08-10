@@ -56,7 +56,7 @@ rollback gate
 → document
 ```
 
-The current real-validation gate is **`moodle.plugins`**. Do not broaden scope before its real evidence is trustworthy.
+The deterministic real-validation sequence is complete through baseline, backup blocking and upgrade precondition blocking. The Spec Kit-style agent layer is implemented. The next real critical-path work requires environment owners to resolve the recorded PHP, Git, backup and exact-command blockers before read-only evidence is rerun.
 
 ## Current real-validation facts
 
@@ -80,7 +80,7 @@ Relevant custom code for this target includes `portal_v3`, `blocks/resetcompleti
 
 Inventory V2 is considered stable enough for this environment. Compatibility correctly blocks Moodle 3.11.18 → 4.1 because PHP 5.6.40 is unsupported.
 
-PR #8 fixed overlapping custom-code scan roots and has been validated against the real run. The first real `moodle.plugins` result after PR #8 exposed PHP-specific patterns incorrectly matching JavaScript. PR #9 contains the regression fix. See `docs/CODEX_HANDOFF.md` for exact counts, files and next commands.
+Plugin scan scope, source-core classification and grouped risk evidence are validated. Baseline now requires executed endpoint/database/log coverage. The real backup gate is explicitly blocked because no operational convention is configured. See `docs/CODEX_HANDOFF.md` for exact evidence and current blockers.
 
 ## Safety invariants
 
@@ -155,7 +155,7 @@ ENAEX-311-TO-410-CRITICAL-PATH-V2
 - Never place credential values in YAML examples.
 - Prefer deterministic repository code over improvised shell.
 - Preserve stable check/finding IDs for auditability.
-- Do not implement the agent layer until the remaining deterministic real-environment validation gates are stable.
+- Keep agent contracts, capability ownership, deterministic orchestration and execution gates synchronized.
 
 ## Canonical checks
 

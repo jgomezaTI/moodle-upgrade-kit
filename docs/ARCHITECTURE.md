@@ -2,12 +2,13 @@
 
 ## Layers
 
-1. **Spec Kit command layer** — exposes each capability to the active AI integration.
-2. **Skill contract layer** — defines purpose, inputs, outputs, safety and procedure.
-3. **Deterministic helper layer** — Python/shell logic for repeatable checks.
-4. **Environment config layer** — instance-specific paths, endpoints, log files and validation sets.
-5. **Evidence layer** — structured artifacts under `runs/<run-id>/`.
-6. **Documentation layer** — converts structured evidence into a Google Drive report.
+1. **Spec Kit command layer** — exposes capabilities and orchestration to the active AI integration.
+2. **Agent contract layer** — defines roles, capability ownership, evidence inputs/outputs and delegation boundaries.
+3. **Skill contract layer** — defines capability purpose, inputs, outputs, safety and procedure.
+4. **Deterministic helper layer** — Python logic for repeatable checks, gates, execution and next-step selection.
+5. **Environment config layer** — instance-specific paths, endpoints, log sources and validation sets.
+6. **Evidence layer** — structured artifacts under `runs/<run-id>/`.
+7. **Documentation layer** — converts structured evidence into a redacted report and optional external synchronization result.
 
 ## Run evidence contract
 
@@ -24,6 +25,7 @@ runs/<run-id>/
 ├── logs-before.json
 ├── database-before.json
 ├── backup.json
+├── agent-state.json
 ├── upgrade-plan.md
 ├── upgrade-result.json
 ├── endpoints-after.json
@@ -39,6 +41,8 @@ Not every file must exist before execution starts. Missing expected evidence is 
 ## Trust boundaries
 
 - `skills/` may reason and recommend.
+- `agents/` may delegate only capabilities granted by their machine-validated contracts.
+- `upgrade-orchestrator` owns no executable capability and never auto-executes a decision.
 - `scripts/` may execute only their documented surface.
 - `configs/` cannot contain secrets.
 - `upgrade` and `rollback` cannot bypass human approval.

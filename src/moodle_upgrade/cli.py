@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from .backup import verify_backups
+from .agents import orchestrate_agents
 from .baseline import capture_baseline
 from .compare import compare_endpoint_sets
 from .compatibility import assess_compatibility
@@ -195,6 +196,24 @@ def cmd_compare(args):
     return 0 if result["ok"] else 3
 
 
+def cmd_orchestrate(args):
+    cfg = load_config(args.config)
+    rd = run_dir(args.run_id)
+    result = orchestrate_agents(
+        cfg,
+        rd,
+        workflow=args.workflow,
+        pre_upgrade_approved=args.pre_upgrade_approved,
+        acceptance_approved=args.acceptance_approved,
+        rollback_approved=args.rollback_approved,
+        force_rollback=args.force_rollback,
+        agents_dir=args.agents_dir,
+    )
+    write_json(rd / "agent-state.json", result)
+    _json_print(result)
+    return 3 if result.get("status") == "blocked" else 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="muk")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -250,6 +269,17 @@ def build_parser():
     command.add_argument("--before", required=True)
     command.add_argument("--after", required=True)
     command.set_defaults(func=cmd_compare)
+
+    command = sub.add_parser("orchestrate")
+    command.add_argument("--config", required=True)
+    command.add_argument("--run-id", required=True)
+    command.add_argument("--workflow", choices=["upgrade", "rollback"], default="upgrade")
+    command.add_argument("--agents-dir", default="agents")
+    command.add_argument("--pre-upgrade-approved", action="store_true")
+    command.add_argument("--acceptance-approved", action="store_true")
+    command.add_argument("--rollback-approved", action="store_true")
+    command.add_argument("--force-rollback", action="store_true")
+    command.set_defaults(func=cmd_orchestrate)
     return parser
 
 

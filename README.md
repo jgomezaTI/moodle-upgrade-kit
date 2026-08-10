@@ -6,6 +6,7 @@ The project separates **capability contracts** from **deterministic execution**:
 
 - `skills/` defines behavior and safety boundaries.
 - `commands/` exposes Spec Kit extension commands.
+- `agents/` defines portable roles, capability permissions and evidence contracts.
 - `src/moodle_upgrade/` contains deterministic Python execution.
 - `workflows/` chains capabilities and human gates.
 - `configs/` contains non-secret environment configuration.
@@ -65,6 +66,7 @@ rollback review gate
 7. Mutation commands use argv-safe execution; shell interpolation/control syntax and credential-bearing arguments are rejected.
 8. Command exit code zero is not acceptance. Post-change `moodle.validate` must pass.
 9. Every real regression should become a stable test or validation check.
+10. Agent decisions never execute automatically; capability ownership and destructive-role separation are machine-validated.
 
 ## Installation
 
@@ -92,7 +94,7 @@ muk backup --config "$CONFIG" --run-id "$RUN_ID"
 
 A compatibility blocker or missing backup evidence is expected to stop the critical path before mutation.
 
-Database check credentials, when checks are configured, are supplied through the environment-variable names declared under `database.connection_env`.
+Database check credentials, when checks are configured, are supplied through the environment-variable names declared under `database.connection_env`. A trusted DB container can instead resolve names declared under `database.container_connection_env` without exporting credential values to host argv or evidence.
 
 ## Mutating flow
 
@@ -136,6 +138,7 @@ runs/<run-id>/
 ├── logs-before.json
 ├── database-before.json
 ├── backup.json
+├── agent-state.json
 ├── upgrade-plan.md
 ├── upgrade-result.json
 ├── inventory-after.json
@@ -149,9 +152,25 @@ runs/<run-id>/
 └── document-result.json
 ```
 
+## Agent orchestration
+
+The seven agent contracts are registered under `agents/`. They are model/vendor neutral: an AI integration reads the role prompt, while `muk orchestrate` deterministically selects at most one permitted next capability from current evidence.
+
+```bash
+muk orchestrate \
+  --config "$CONFIG" \
+  --run-id "$RUN_ID" \
+  --workflow upgrade \
+  --agents-dir agents
+```
+
+The result is written to `agent-state.json` with one of four statuses: `action_required`, `human_gate`, `blocked`, or `complete`. It always sets `executes_automatically: false` for delegated actions.
+
+Only `upgrade-agent` owns `moodle.upgrade`; only `rollback-agent` owns `moodle.rollback`; the orchestrator owns no capability. Approval inputs cannot override machine blockers, enable mutation or invent environment commands. See `docs/AGENT_ARCHITECTURE.md`.
+
 ## Spec Kit alignment
 
-`extension.yml` declares the 12 command contracts and `workflows/moodle-upgrade/workflow.yml` / `workflows/moodle-rollback/workflow.yml` describe the gated orchestration.
+`extension.yml` declares the capability commands plus `speckit.moodle.orchestrate`; `workflows/moodle-upgrade/workflow.yml` and `workflows/moodle-rollback/workflow.yml` describe the gated operational paths.
 
 The repository itself remains the technical source of truth. `AGENTS.md` and `docs/PROJECT_CONTEXT.md` provide persistent handoff context for Codex/other coding agents.
 
@@ -159,4 +178,4 @@ The repository itself remains the technical source of truth. `AGENTS.md` and `do
 
 The first real target is the Enaex Spanish LMS under WSL + Docker, currently documented as Moodle `3.11.18` → `4.1`. The observed PHP runtime is `5.6.40`; `moodle.compatibility` is expected to classify that as a blocker before any mutation is possible.
 
-The next step is to run the **current read-only critical path** against that environment and turn any newly discovered defect into a regression test before enabling mutation.
+The real read-only critical path has been exercised through backup and mutation-gate validation. Current blockers remain PHP compatibility, dirty LMS Git state, missing verified backup conventions, disabled mutation and missing environment-owned upgrade commands. The agent layer reports those blockers without attempting to resolve or bypass them.

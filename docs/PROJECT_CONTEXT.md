@@ -434,23 +434,14 @@ On Ubuntu/WSL, the matching `python3.x-venv` package may need to be installed be
 
 ## 14. Next development priority
 
-The immediate priority is **not** to run an upgrade.
-
-Recommended sequence:
+The deterministic framework and Spec Kit-style agent layer are implemented. The immediate priority for the real Enaex target is **not** to run an upgrade; it is to resolve the recorded environment-owned blockers:
 
 ```text
-1. Pull current main.
-2. Update the real local environment config.
-3. Run another real `moodle.inventory` against the Enaex 3.11 environment.
-4. Review inventory evidence for remaining gaps.
-5. Convert any remaining inventory defects into tests.
-6. Begin implementation of `moodle.compatibility`.
-```
-
-A useful next run ID is:
-
-```text
-ENAEX-311-TO-410-INVENTORY-V2
+1. Upgrade PHP/runtime compatibility for both the current and target Moodle requirements.
+2. Establish the required clean Git state without discarding user work.
+3. Configure and verify explicit database/code/moodledata backup conventions.
+4. Configure exact environment-owned upgrade commands.
+5. Re-run deterministic evidence and `muk orchestrate`; mutation remains forbidden until every machine gate and explicit human approval pass.
 ```
 
 ## 15. `moodle.compatibility` intended scope

@@ -1,0 +1,16 @@
+schema_version: "1.0"
+agents:
+  - id: upgrade-orchestrator
+    contract: upgrade-orchestrator/AGENT.md
+  - id: discovery-agent
+    contract: discovery-agent/AGENT.md
+  - id: compatibility-agent
+    contract: compatibility-agent/AGENT.md
+  - id: baseline-agent
+    contract: baseline-agent/AGENT.md
+  - id: upgrade-agent
+    contract: upgrade-agent/AGENT.md
+  - id: rollback-agent
+    contract: rollback-agent/AGENT.md
+  - id: documentation-agent
+    contract: documentation-agent/AGENT.md

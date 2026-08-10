@@ -233,9 +233,8 @@ No upgrade CLI or configured upgrade sequence was run. Regression coverage uses 
 
 Do not rerun inventory or compatibility.
 
-1. Publish the focused backup and machine-gate regression coverage.
-2. Design the seven Spec Kit-style agent contracts around the deterministic capabilities and evidence.
-3. Implement agent capability permissions and orchestration without reimplementing deterministic logic.
+1. Keep the real Enaex run blocked until environment owners resolve the recorded PHP, Git, backup and exact-command prerequisites.
+2. Rerun the read-only evidence and agent decision only after those external conditions change.
 
 ## Deterministic validation sequence completed
 
@@ -245,14 +244,14 @@ In order:
 1. Baseline/endpoints/database/logs validated read-only.
 2. Backup gate validated as an explicit blocker because no real backup convention is configured.
 3. Upgrade machine gates proven to block even when human approval input is true.
-4. The Spec Kit-style agent layer is now the next critical development block.
+4. The Spec Kit-style agent layer is implemented and validates those same gates.
 ```
 
 Do not change PHP simply to make compatibility pass yet. Do not run a real upgrade or rollback.
 
-## Agent layer — planned after deterministic validation
+## Agent layer — implemented
 
-Planned logical agents:
+Implemented logical agents:
 
 ```text
 upgrade-orchestrator
@@ -264,7 +263,11 @@ rollback-agent
 documentation-agent
 ```
 
-Agents orchestrate existing deterministic capabilities and evidence. They must not reimplement compatibility rules, invent operational commands, or bypass machine gates.
+The machine-validated registry gives every deterministic capability exactly one owner. The orchestrator is delegate-only; upgrade and rollback have exclusive separate owners. Decisions contain at most one `executes_automatically: false` action and reuse the same upgrade/rollback precondition evaluators as execution.
+
+The real agent decision is blocked by `MUTATION_DISABLED`, `GIT_NOT_CLEAN`, `COMPATIBILITY_NOT_PASSED`, `BACKUP_NOT_VERIFIED` and missing configured upgrade steps. This is expected and no destructive command executed.
+
+Framework `0.2.0` canonical validation passed with 77 tests, editable installation, example/local config validation and a real read-only orchestrator run. `agent-state.json` contains no obvious credential/raw-log fields and reports `next_action: null`.
 
 ## Safety invariants
 
