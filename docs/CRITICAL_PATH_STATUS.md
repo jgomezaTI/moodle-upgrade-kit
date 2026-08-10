@@ -116,12 +116,12 @@ Observed analysis:
 
 PR #10 (`fix: scope PHP patterns to executable regions`) is merged. The corrected real scan contains no PHP-only finding in JavaScript, comments, string literals or embedded JavaScript regions.
 
-The current branch `agent/generic-core-reference` implements generic source-core classification. The capability consumes a configured local Git repository/ref/tree root, verifies its Moodle identity exactly against inventory and performs bounded content comparisons. No source or target Moodle version is hard-coded.
+Commit `92729ee` on `main` implements generic source-core classification. The capability consumes a configured local Git repository/ref/tree root, verifies its Moodle identity exactly against inventory and performs bounded content comparisons. No source or target Moodle version is hard-coded.
 
-Canonical validation on the branch:
+Canonical validation after source-core classification:
 
 ```text
-pytest: 51 passed
+pytest: 53 passed (including current risk-grouping regressions)
 validate-config configs/example.yml: OK
 ```
 
@@ -155,26 +155,45 @@ Evidence checks confirmed:
 
 The previous plugin evidence is preserved as `plugins-pre-core-reference.json` in the same ignored run directory.
 
+The current branch `agent/plugin-risk-groups` adds derived review indexes while preserving every original finding and stable ID. Real evidence now reduces the review surface from 2395 individual occurrences to 4 rule summaries and 95 rule/scope/file groups without changing any verdict:
+
+```text
+hardcoded_mdl_prefix:          2152 hits / 63 files / 6 scopes
+legacy_user_contact_column:     239 hits / 28 files / 5 scopes
+php_create_function_removed:      2 hits /  2 files / 1 scope
+php_each_removed:                 2 hits /  2 files / 2 scopes
+```
+
+Groups use a bounded 20-line sample and explicit truncation state. Review ordering is deterministic by severity, volume and stable textual keys, and explicitly does not affect severity.
+
+Validation confirmed:
+
+- all 2395 `risk_hits` remain structurally identical;
+- `findings` and `manual_review` remain structurally identical;
+- rule and group occurrence totals both equal 2395;
+- critical/warning/review/ready values are unchanged;
+- no obvious secrets appear in evidence.
+
+The pre-grouping evidence is preserved as `plugins-pre-risk-grouping.json`.
+
 ## Exact next step
 
 Do not rerun inventory or compatibility.
 
-1. Review and publish the focused generic source-core-reference change through its own PR. Do not merge it without explicit user instruction.
-2. Group/prioritize repeated high-volume warnings by rule and file without discarding individual finding evidence or changing stable finding IDs.
-3. Rerun only `moodle.plugins`; convert any new scanner defect into a deterministic regression test.
-4. When plugin evidence is usable, continue with real baseline/endpoints/database/logs validation.
+1. Review and publish the focused risk-grouping change as instructed by the user.
+2. Inspect baseline/endpoints/database/logs contracts, implementation, local configuration and existing evidence.
+3. Configure the actual local base URL and read-only database validation environment variables/checks with explicit user confirmation.
+4. Run and validate baseline/endpoints/database/logs against the real environment.
 
 ## Work after plugin evidence is trustworthy
 
 In order:
 
 ```text
-1. Group/prioritize noisy repeated warnings such as hard-coded `mdl_` prefix findings.
-2. Validate baseline/endpoints/database/logs against the real environment.
-3. Configure the actual local base URL and DB validation environment variables/checks.
-4. Validate backup verification against real backup conventions.
-5. Prove upgrade remains blocked while compatibility/Git/other machine gates fail.
-6. Only then begin the agent layer.
+1. Validate baseline/endpoints/database/logs against the real environment.
+2. Validate backup verification against real backup conventions.
+3. Prove upgrade remains blocked while compatibility/Git/other machine gates fail.
+4. Only then begin the Spec Kit-style agent layer.
 ```
 
 Do not change PHP simply to make compatibility pass yet. Do not run a real upgrade or rollback.

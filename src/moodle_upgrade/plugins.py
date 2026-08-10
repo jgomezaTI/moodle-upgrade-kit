@@ -18,6 +18,8 @@ PHP_CODE_VIEW = "php-code"
 DEFAULT_CORE_REFERENCE_MAX_FILES = 100_000
 DEFAULT_CORE_COMPONENT_MAX_FILES = 20_000
 DEFAULT_CORE_CHANGE_EVIDENCE_LIMIT = 5_000
+DEFAULT_RISK_GROUP_LINE_SAMPLE = 20
+SEVERITY_REVIEW_ORDER = {"critical": 0, "warning": 1, "info": 2}
 
 
 @dataclass
@@ -306,6 +308,104 @@ def _scan_path(root: Path, display_root: Path, target_version: str, max_files: i
                 if re.search(pattern["regex"], candidate_line, flags=re.IGNORECASE):
                     hits.append({"id": pattern["id"], "severity": pattern["severity"], "path": rel, "line": lineno, "message": pattern["message"]})
     return hits, {"scanned_files": scanned_files, "truncated_files": truncated_files, "max_files": max_files, "max_bytes_per_file": max_bytes}
+
+
+def _build_risk_review_views(
+    hits: list[dict[str, Any]], line_sample_limit: int = DEFAULT_RISK_GROUP_LINE_SAMPLE,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Build bounded review indexes without altering individual risk hits."""
+    if line_sample_limit <= 0:
+        raise ValueError("line_sample_limit must be positive")
+
+    rule_buckets: dict[tuple[str, str], dict[str, Any]] = {}
+    group_buckets: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+
+    for hit in hits:
+        rule_id = str(hit.get("id") or "unknown")
+        severity = str(hit.get("severity") or "info")
+        scope = str(hit.get("scope") or "")
+        path = str(hit.get("path") or "")
+        message = str(hit.get("message") or "")
+
+        rule_key = (rule_id, severity)
+        rule = rule_buckets.setdefault(rule_key, {
+            "id": rule_id,
+            "severity": severity,
+            "message": message,
+            "occurrence_count": 0,
+            "files": set(),
+            "scopes": set(),
+        })
+        rule["occurrence_count"] += 1
+        rule["files"].add((scope, path))
+        rule["scopes"].add(scope)
+
+        group_key = (rule_id, severity, scope, path)
+        group = group_buckets.setdefault(group_key, {
+            "id": rule_id,
+            "severity": severity,
+            "scope": scope,
+            "path": path,
+            "message": message,
+            "occurrence_count": 0,
+            "lines": set(),
+        })
+        group["occurrence_count"] += 1
+        line = hit.get("line")
+        if isinstance(line, int) and not isinstance(line, bool):
+            group["lines"].add(line)
+
+    rule_summaries = [
+        {
+            "id": rule["id"],
+            "severity": rule["severity"],
+            "message": rule["message"],
+            "occurrence_count": rule["occurrence_count"],
+            "affected_file_count": len(rule["files"]),
+            "affected_scope_count": len(rule["scopes"]),
+        }
+        for rule in rule_buckets.values()
+    ]
+    rule_summaries.sort(key=lambda item: (
+        SEVERITY_REVIEW_ORDER.get(item["severity"], len(SEVERITY_REVIEW_ORDER)),
+        -item["occurrence_count"],
+        item["id"],
+    ))
+
+    risk_groups: list[dict[str, Any]] = []
+    for group in group_buckets.values():
+        lines = sorted(group["lines"])
+        risk_groups.append({
+            "id": group["id"],
+            "severity": group["severity"],
+            "scope": group["scope"],
+            "path": group["path"],
+            "message": group["message"],
+            "occurrence_count": group["occurrence_count"],
+            "first_line": lines[0] if lines else None,
+            "last_line": lines[-1] if lines else None,
+            "line_sample": lines[:line_sample_limit],
+            "line_sample_truncated": len(lines) > line_sample_limit,
+        })
+    risk_groups.sort(key=lambda item: (
+        SEVERITY_REVIEW_ORDER.get(item["severity"], len(SEVERITY_REVIEW_ORDER)),
+        -item["occurrence_count"],
+        item["id"],
+        item["scope"],
+        item["path"],
+    ))
+    for rank, group in enumerate(risk_groups, start=1):
+        group["review_rank"] = rank
+
+    grouping = {
+        "group_keys": ["id", "severity", "scope", "path"],
+        "review_order": ["severity", "occurrence_count_desc", "id", "scope", "path"],
+        "severity_order": list(SEVERITY_REVIEW_ORDER),
+        "line_sample_limit": line_sample_limit,
+        "individual_hits_preserved": True,
+        "review_rank_affects_severity": False,
+    }
+    return rule_summaries, risk_groups, grouping
 
 
 def _valid_git_ref(value: str) -> bool:
@@ -751,17 +851,20 @@ def analyze_plugins(config: dict[str, Any], inventory: dict[str, Any]) -> dict[s
                 f"Verified source-core comparison found {core_modification_count} modified or missing core files.",
             ))
 
+    risk_rule_summaries, risk_groups, risk_grouping = _build_risk_review_views(all_hits)
     counts = Counter(f.severity for f in findings)
     classifications = Counter(str(plugin.get("classification") or "unclassified") for plugin in plugins)
     return {
-        "target_version": target, "plugins": plugins, "custom_code_scans": scan_summaries, "covered_scan_paths": covered_scan_paths, "risk_hits": all_hits,
+        "target_version": target, "plugins": plugins, "custom_code_scans": scan_summaries, "covered_scan_paths": covered_scan_paths,
+        "risk_hits": all_hits, "risk_rule_summaries": risk_rule_summaries, "risk_groups": risk_groups, "risk_grouping": risk_grouping,
         "core_reference_ref": core_ref, "core_reference": reference_evidence,
         "core_modifications": core_modifications, "core_modification_count": core_modification_count,
         "core_modifications_truncated": core_modifications_truncated, "manual_review": review,
         "findings": [asdict(f) for f in findings],
         "summary": {
             "critical": counts["critical"], "warning": counts["warning"], "info": counts["info"],
-            "plugin_count": len(plugins), "risk_hit_count": len(all_hits), "review_count": len(review),
+            "plugin_count": len(plugins), "risk_hit_count": len(all_hits), "risk_rule_count": len(risk_rule_summaries),
+            "risk_group_count": len(risk_groups), "review_count": len(review),
             "scan_root_count": len(scan_summaries), "covered_scan_path_count": len(covered_scan_paths),
             "classification_counts": dict(sorted(classifications.items())), "ready": counts["critical"] == 0,
         },

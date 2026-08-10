@@ -205,15 +205,15 @@ Validated outcomes:
 - the real rerun reported no PHP-only findings in `.js` files;
 - the remaining real PHP warning in the previously scanned roots was `php_each_removed` in `portal_v3/lib/fpdi/fpdi.php:563`.
 
-## Current development item — generic source-core reference
+## Generic source-core reference — published on main
 
-Current branch:
+Published commit:
 
 ```text
-agent/generic-core-reference
+92729ee feat: classify plugins against verified source core
 ```
 
-The branch adds a generic, local and read-only source-core reference contract. It does not contain an Enaex or Moodle-version-specific default.
+The implementation adds a generic, local and read-only source-core reference contract. It does not contain an Enaex or Moodle-version-specific default.
 
 Implemented behavior:
 
@@ -224,13 +224,6 @@ Implemented behavior:
 - scans non-core and core-modified components in addition to explicit custom code;
 - never clones, fetches, checks out or writes Git metadata;
 - preserves the previous `core_reference_ref` shorthand.
-
-Canonical local validation:
-
-```text
-pytest: 51 passed
-validate-config configs/example.yml: OK
-```
 
 Real read-only validation used the official Moodle `v3.11.18` commit only as the Enaex source-version fixture:
 
@@ -257,16 +250,65 @@ The prior evidence is preserved as:
 runs/ENAEX-311-TO-410-CRITICAL-PATH-V2/plugins-pre-core-reference.json
 ```
 
+## Current development item — deterministic risk grouping
+
+Current branch:
+
+```text
+agent/plugin-risk-groups
+```
+
+The branch adds derived review views without modifying, deduplicating or downgrading individual risk evidence:
+
+- summaries by stable rule ID and severity;
+- groups by rule, severity, scan scope and file;
+- deterministic review order by severity, occurrence count and stable textual keys;
+- bounded line samples of 20 entries with explicit truncation evidence;
+- explicit evidence that review rank does not affect severity.
+
+Canonical local validation:
+
+```text
+pytest: 53 passed
+validate-config configs/example.yml: OK
+```
+
+Real read-only evidence now reports:
+
+```text
+risk hits preserved: 2395
+risk rules: 4
+risk groups: 95
+group/rule occurrence totals: 2395
+critical/warning/review/ready: unchanged
+```
+
+Rule summaries:
+
+```text
+hardcoded_mdl_prefix:          2152 hits / 63 files / 6 scopes
+legacy_user_contact_column:     239 hits / 28 files / 5 scopes
+php_create_function_removed:      2 hits /  2 files / 1 scope
+php_each_removed:                 2 hits /  2 files / 2 scopes
+```
+
+The evidence before grouping is preserved as:
+
+```text
+runs/ENAEX-311-TO-410-CRITICAL-PATH-V2/plugins-pre-risk-grouping.json
+```
+
+Verification confirmed `risk_hits`, `findings` and `manual_review` are structurally identical before and after grouping, both derived occurrence totals equal 2395 and no obvious secret appears in evidence.
+
 ## Exact next step
 
-1. Review and publish the focused generic source-core-reference change through its own PR; do not merge without explicit user instruction.
-2. Group/prioritize the high-volume repeated warnings by rule and file while preserving individual findings and stable IDs in evidence.
-3. Rerun only `moodle.plugins` and convert any newly exposed scanner defect into a regression test.
-4. Once plugin evidence is usable, move to real baseline/endpoints/database/logs validation.
-5. Configure the real base URL and database validation environment-variable/check definitions.
-6. Validate backup verification against the real environment.
-7. Prove `muk upgrade --approved` remains blocked while compatibility, Git or another machine gate fails.
-8. Only after those deterministic gates are stable, implement the agent layer.
+1. Review and publish the focused deterministic risk-grouping change as instructed by the user.
+2. Inspect the existing baseline/endpoints/database/logs contracts, implementation, local configuration and current evidence without rerunning inventory or compatibility.
+3. Configure the real local base URL and read-only database validation environment-variable/check definitions with explicit user confirmation.
+4. Run and validate baseline/endpoints/database/logs against the real environment.
+5. Validate backup verification against the real environment.
+6. Prove `muk upgrade --approved` remains blocked while compatibility, Git or another machine gate fails.
+7. Only after those deterministic gates are stable, design and implement the Spec Kit-style agent layer.
 
 Do not change PHP merely to make compatibility green. Do not run upgrade, rollback or implement agents yet.
 
@@ -307,7 +349,7 @@ Agent work starts only after the deterministic read-only layer has completed the
 Read AGENTS.md, docs/CODEX_HANDOFF.md, docs/CRITICAL_PATH_STATUS.md,
 and skills/moodle.plugins/SKILL.md first.
 
-Then inspect the current Git branch, main, the generic source-core-reference
+Then inspect the current Git branch, main, the deterministic risk-grouping
 development item, and the evidence under
 runs/ENAEX-311-TO-410-CRITICAL-PATH-V2 if present.
 
