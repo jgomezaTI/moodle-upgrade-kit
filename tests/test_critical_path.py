@@ -212,9 +212,37 @@ def _successful_runner(argv, **kwargs):
 
 def test_upgrade_is_blocked_until_safety_gates_pass(tmp_path):
     cfg = config_fixture(tmp_path)
-    result = execute_upgrade(cfg, True, inventory_fixture(tmp_path), {"summary": {"compatible": True}}, {"summary": {"verified": True}}, baseline={"summary": {"complete": True}}, plugins={"summary": {"critical": 0}}, runner=_successful_runner)
+    def runner_must_not_execute(*_args, **_kwargs):
+        raise AssertionError("upgrade runner must not execute while a machine gate is blocked")
+
+    result = execute_upgrade(cfg, True, inventory_fixture(tmp_path), {"summary": {"compatible": True}}, {"summary": {"verified": True}}, baseline={"summary": {"complete": True}}, plugins={"summary": {"critical": 0}}, runner=runner_must_not_execute)
     assert result["executed"] is False
     assert any(finding["code"] == "MUTATION_DISABLED" for finding in result["findings"])
+
+
+def test_human_approval_cannot_override_failed_machine_gates(tmp_path):
+    cfg = config_fixture(tmp_path)
+    inventory = inventory_fixture(tmp_path)
+    inventory["platform"]["git"]["dirty"] = True
+
+    def runner_must_not_execute(*_args, **_kwargs):
+        raise AssertionError("upgrade runner must not execute while machine gates are blocked")
+
+    result = execute_upgrade(
+        cfg,
+        True,
+        inventory,
+        {"summary": {"compatible": False}},
+        {"summary": {"verified": False}},
+        baseline={"summary": {"complete": True}},
+        plugins={"summary": {"critical": 0}},
+        runner=runner_must_not_execute,
+    )
+
+    codes = {finding["code"] for finding in result["findings"]}
+    assert {"MUTATION_DISABLED", "GIT_NOT_CLEAN", "COMPATIBILITY_NOT_PASSED", "BACKUP_NOT_VERIFIED"} <= codes
+    assert result["approved"] is True
+    assert result["executed"] is False
 
 
 def test_upgrade_runs_exact_sequence_when_gated(tmp_path):

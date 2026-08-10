@@ -2,7 +2,7 @@
 name: moodle.backup
 description: Verify explicit backup component identity, accessibility and freshness before any mutating upgrade or rollback step.
 effect: read-only
-version: 0.2.0
+version: 0.2.1
 ---
 
 # moodle.backup
@@ -33,10 +33,13 @@ Prove that the configured rollback prerequisites exist. File existence alone is 
 4. Select the newest candidate and calculate age against policy.
 5. Optionally compute SHA-256 for selected files when configured.
 6. Mark the backup set verified only when every required component is identified and within freshness policy.
+7. Report configured/accessible root and required/verified component coverage. Missing root or component configuration is an explicit critical blocker, never an unexplained `verified: false` result.
 
 ## Blocking conditions
 
 - Backup root inaccessible
+- No backup root configured
+- No required backup component configured
 - Required component has no identity rule
 - No candidate matches a required component
 - Selected required component is older than policy

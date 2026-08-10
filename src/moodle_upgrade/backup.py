@@ -51,6 +51,19 @@ def verify_backups(config: dict[str, Any], now: datetime | None = None) -> dict[
     checksum = bool(backup_cfg.get("checksum", False))
     findings: list[Finding] = []
 
+    if not roots:
+        findings.append(Finding(
+            "critical",
+            "BACKUP_LOCATIONS_NOT_CONFIGURED",
+            "At least one explicit backup root directory is required.",
+        ))
+    if not required:
+        findings.append(Finding(
+            "critical",
+            "BACKUP_COMPONENTS_NOT_CONFIGURED",
+            "At least one required backup component with an explicit identity rule is required.",
+        ))
+
     accessible_roots: list[Path] = []
     for root in roots:
         if not root.exists() or not root.is_dir():
@@ -109,6 +122,10 @@ def verify_backups(config: dict[str, Any], now: datetime | None = None) -> dict[
         "findings": [asdict(f) for f in findings],
         "summary": {
             "critical": counts["critical"], "warning": counts["warning"], "info": counts["info"],
-            "verified": bool(required) and counts["critical"] == 0 and all(item.get("ok") for item in components.values()),
+            "locations_configured": len(roots),
+            "locations_accessible": len(accessible_roots),
+            "components_required": len(required),
+            "components_verified": sum(1 for item in components.values() if item.get("ok")),
+            "verified": bool(roots) and bool(required) and counts["critical"] == 0 and all(item.get("ok") for item in components.values()),
         },
     }

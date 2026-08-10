@@ -200,22 +200,52 @@ complete: true
 
 Both HTTPS endpoints returned 200 with the staging-only self-signed TLS exception recorded as `tls_verified: false`. The DB health `SELECT 1` passed. All three Docker log sources were readable with no configured critical/warning signatures. Secret and raw-log field scans were clean.
 
+### Backup verification — validated blocker
+
+The real target has no configured operational backup roots or component identity rules. Files in Moodle source/tests with backup-like names are not rollback evidence and were not inferred as such.
+
+The empty-config false-opacity defect was converted into regression coverage. The real read-only backup run exits 2 and reports:
+
+```text
+BACKUP_LOCATIONS_NOT_CONFIGURED
+BACKUP_COMPONENTS_NOT_CONFIGURED
+locations configured/accessible: 0 / 0
+components required/verified: 0 / 0
+verified: false
+```
+
+No backup was created, modified or restored.
+
+### Upgrade machine-gate block — validated without mutation
+
+The mutation precondition evaluator consumed the existing real evidence with approval deliberately true and returned:
+
+```text
+MUTATION_DISABLED
+GIT_NOT_CLEAN
+COMPATIBILITY_NOT_PASSED
+BACKUP_NOT_VERIFIED
+```
+
+No upgrade CLI or configured upgrade sequence was run. Regression coverage uses a runner that raises if called and confirms human approval cannot bypass these failed machine gates.
+
 ## Exact next step
 
 Do not rerun inventory or compatibility.
 
-1. Publish the focused baseline/endpoints/database/logs hardening and regression coverage.
-2. Inspect and validate `moodle.backup` against the real backup conventions in read-only mode.
-3. Prove the upgrade path remains blocked by compatibility/Git/backup machine gates without executing a real upgrade command sequence.
+1. Publish the focused backup and machine-gate regression coverage.
+2. Design the seven Spec Kit-style agent contracts around the deterministic capabilities and evidence.
+3. Implement agent capability permissions and orchestration without reimplementing deterministic logic.
 
-## Work after plugin evidence is trustworthy
+## Deterministic validation sequence completed
 
 In order:
 
 ```text
-1. Validate backup verification against real backup conventions.
-2. Prove upgrade remains blocked while compatibility/Git/other machine gates fail.
-3. Only then begin the Spec Kit-style agent layer.
+1. Baseline/endpoints/database/logs validated read-only.
+2. Backup gate validated as an explicit blocker because no real backup convention is configured.
+3. Upgrade machine gates proven to block even when human approval input is true.
+4. The Spec Kit-style agent layer is now the next critical development block.
 ```
 
 Do not change PHP simply to make compatibility pass yet. Do not run a real upgrade or rollback.

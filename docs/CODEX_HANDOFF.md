@@ -325,12 +325,38 @@ TLS verified: false (explicit staging exception for local self-signed HTTPS)
 
 The four generated artifacts contain no obvious secret matches and no raw-log fields. Inventory, compatibility and plugin analysis were not rerun.
 
+## Backup and upgrade blocking — validated read-only
+
+No operational upgrade backup set or explicit backup convention is configured for the real Enaex target. `backup.paths` is empty, and repository inspection found only Moodle source/fixture files with backup-like names, which must not be inferred as rollback artifacts.
+
+The previous empty configuration produced `verified: false` without an actionable finding. Regression coverage now converts that real defect into two stable critical blockers and explicit coverage counts:
+
+```text
+BACKUP_LOCATIONS_NOT_CONFIGURED
+BACKUP_COMPONENTS_NOT_CONFIGURED
+locations configured/accessible: 0 / 0
+components required/verified: 0 / 0
+verified: false
+```
+
+The real `moodle.backup` run exited 2 and wrote `backup.json`. It did not create, modify, checksum or restore any backup.
+
+The mutation precondition evaluator was then run directly against the existing real inventory, compatibility and backup evidence, with human approval deliberately set true to prove it cannot override machine gates. It remained blocked by:
+
+```text
+MUTATION_DISABLED
+GIT_NOT_CLEAN
+COMPATIBILITY_NOT_PASSED
+BACKUP_NOT_VERIFIED
+```
+
+No `muk upgrade` command or configured upgrade command sequence was executed. A sentinel-runner regression test proves the upgrade runner is never called while those machine gates fail.
+
 ## Exact next step
 
-1. Publish the focused baseline/endpoints/database/logs hardening and its regression coverage.
-2. Validate backup verification against the real backup conventions without creating, restoring or mutating backups.
-3. Prove the upgrade path remains blocked by machine gates without executing a real upgrade command sequence.
-4. Only after those deterministic gates are stable, design and implement the Spec Kit-style agent layer.
+1. Publish the focused backup evidence and machine-gate regression coverage.
+2. Design the Spec Kit-style agent contracts around existing deterministic capability/evidence contracts.
+3. Implement the seven agents with explicit capability permissions; upgrade/rollback agents must remain unable to bypass the existing machine and human gates.
 
 Do not change PHP merely to make compatibility green. Do not run upgrade, rollback or implement agents yet.
 
@@ -352,7 +378,7 @@ documentation-agent
 
 The orchestrator should consume structured run evidence and select the next allowed capability. It must not invent compatibility verdicts or bypass machine gates.
 
-Agent work starts only after the deterministic read-only layer has completed the remaining real validation gates.
+The deterministic read-only validation gates are now stable enough to begin this layer. Agent implementation must not attempt to resolve the real PHP, dirty-Git or missing-backup blockers and must keep `safety.allow_mutation: false`.
 
 ## Safety invariants
 
