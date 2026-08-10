@@ -57,3 +57,9 @@ muk orchestrate \
 ```
 
 Approval flags only tell the selector that a named human gate was satisfied. They do not enable mutation and are not forwarded automatically. The selected destructive capability still requires its own explicit CLI approval and all deterministic evidence.
+
+## Configured-code review entry point
+
+`muk review-code --config <yaml> --run-id <id>` is the direct read-only entry point for AI-assisted module review. It refreshes inventory by default, invokes the existing `moodle.plugins` analyzer and derives `code-review.json`; it does not contain a second scanner.
+
+The queue preserves deterministic severity and `review_rank`, includes only file/line metadata and records whether every YAML-configured target was scanned directly or through a deduplicated parent. `speckit.moodle.review-code` instructs `compatibility-agent` to inspect that queue and propose the smallest correction, while file editing remains separately authorized.

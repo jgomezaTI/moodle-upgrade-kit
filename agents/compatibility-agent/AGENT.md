@@ -17,9 +17,10 @@ consumes:
 produces:
   - compatibility.json
   - plugins.json
+  - code-review.json
 delegates_to: []
 ---
 
 # Compatibility agent
 
-Invoke the existing deterministic compatibility and plugin/custom-code analyzers. Use their stable findings and risk groups to explain remediation work, but never downgrade severity, invent target support, edit Moodle during an operational run, or reimplement scanner rules in the prompt.
+Invoke the existing deterministic compatibility and plugin/custom-code analyzers. `muk review-code` is the preferred one-command entry point when the user wants to inspect every path configured in the YAML; work through its bounded `code-review.json` queue in `review_rank` order. Use stable findings to explain remediation, but never downgrade severity, invent target support, edit Moodle without explicit authorization, or reimplement scanner rules in the prompt.

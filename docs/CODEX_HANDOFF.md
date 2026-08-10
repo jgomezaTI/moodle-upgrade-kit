@@ -381,6 +381,18 @@ real orchestrator: exit 3 / blocked / next_action null
 safety.allow_mutation: false
 ```
 
+## Configured-code review command
+
+Framework `0.2.1` adds a direct read-only entry point for the user's primary workflow:
+
+```bash
+muk review-code --config <environment.yml> --run-id <review-id>
+```
+
+It refreshes inventory, reads `custom_code.paths` and `plugins.custom_paths`, invokes the existing deterministic plugin scanner, and writes `code-review.json` for `compatibility-agent`. Every configured path remains explicit as `scanned`, `covered-by-parent` or `not-scanned`; the command does not modify Moodle code. `speckit.moodle.review-code` then instructs the AI agent to process the queue and propose regression-tested corrections, with edits requiring separate authorization.
+
+Validation: 80 tests pass. The real read-only run `ENAEX-CONFIGURED-CODE-REVIEW-V1` covered 10/10 configured targets (5 directly, 5 through a deduplicated parent), left zero targets uncovered, and produced 90 warning groups plus 105 manual-review items. Evidence contains no source contents or obvious credential fields, and `safety.allow_mutation` remains false.
+
 ## Exact next step
 
 The framework agent layer is complete. The exact next critical-path work belongs to the real environment: its owners must resolve PHP compatibility, establish the required clean Git state, configure and verify real backup conventions, and declare the exact upgrade commands. Then rerun the read-only evidence and orchestrator before any mutation is considered.

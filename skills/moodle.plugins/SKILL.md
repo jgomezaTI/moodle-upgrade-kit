@@ -2,7 +2,7 @@
 name: moodle.plugins
 description: Review Moodle plugins and arbitrary project code for known upgrade risks while keeping uncertain compatibility explicit.
 effect: read-only
-version: 0.3.1
+version: 0.3.2
 ---
 
 # moodle.plugins
@@ -21,6 +21,7 @@ Analyze the plugin/custom-code candidates discovered by inventory, including cod
 ## Outputs
 
 - `runs/<run-id>/plugins.json`
+- Optional `runs/<run-id>/code-review.json` queue for the compatibility agent
 - Plugin classifications, bounded source-scan findings and manual-review candidates
 - Derived per-rule summaries and per-rule/scope/file review groups while preserving every individual risk hit
 - Explicit `covered_scan_paths` evidence when a configured child path is already covered by a configured parent scan root
@@ -43,6 +44,7 @@ Analyze the plugin/custom-code candidates discovered by inventory, including cod
 14. Compare bounded file manifests and classify inventory candidates as exact `core`, `core-modified`, `non-core`, explicit `custom`, or `unclassified`. Exact core matches do not require plugin-level review; modified core, non-core and custom code remain scan/review targets unless target compatibility is declared.
 15. Surface modified or missing source-core filenames within evidence limits without storing file contents.
 16. Keep custom, modified-core, non-core and unclassified plugins on a manual-review list when target compatibility is not proven.
+17. The convenience review command may create missing inventory evidence, invoke this same analyzer once, and derive a bounded `code-review.json` queue. It must not duplicate scanner rules, persist source contents or modify inspected code.
 
 ## Safety
 

@@ -2,7 +2,7 @@ schema_version: "1.0"
 extension:
   id: "moodle"
   name: "Moodle Upgrade Kit"
-  version: "0.2.0"
+  version: "0.2.1"
   description: "Guarded Moodle upgrade diagnostics, execution planning, validation, rollback and evidence generation."
   author: "Javier / Moodle Upgrade Kit contributors"
   license: "MIT"
@@ -65,6 +65,9 @@ provides:
     - name: "speckit.moodle.orchestrate"
       file: "commands/speckit.moodle.orchestrate.md"
       description: "Select the next permitted agent capability from structured run evidence."
+    - name: "speckit.moodle.review-code"
+      file: "commands/speckit.moodle.review-code.md"
+      description: "Inventory and queue configured custom-code folders for compatibility-agent review."
   config:
     - name: "moodle-config.yml"
       template: "configs/example.yml"

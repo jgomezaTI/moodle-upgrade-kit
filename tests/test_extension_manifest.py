@@ -11,7 +11,7 @@ def test_extension_manifest_shape_and_commands():
     assert data["extension"]["id"] == "moodle"
     assert data["requires"]["speckit_version"]
     commands = data["provides"]["commands"]
-    assert len(commands) == 13
+    assert len(commands) == 14
     for command in commands:
         assert re.fullmatch(r"speckit\.moodle\.[a-z0-9-]+", command["name"])
         file_path = ROOT / command["file"]

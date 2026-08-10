@@ -156,6 +156,7 @@ ENAEX-311-TO-410-CRITICAL-PATH-V2
 - Prefer deterministic repository code over improvised shell.
 - Preserve stable check/finding IDs for auditability.
 - Keep agent contracts, capability ownership, deterministic orchestration and execution gates synchronized.
+- Use `muk review-code` / `speckit.moodle.review-code` as the one-command read-only entry point for reviewing YAML-configured custom-code paths; it must reuse `moodle.plugins` rather than introduce a second scanner.
 
 ## Canonical checks
 

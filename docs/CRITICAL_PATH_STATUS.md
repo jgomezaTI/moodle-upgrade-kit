@@ -269,6 +269,10 @@ The real agent decision is blocked by `MUTATION_DISABLED`, `GIT_NOT_CLEAN`, `COM
 
 Framework `0.2.0` canonical validation passed with 77 tests, editable installation, example/local config validation and a real read-only orchestrator run. `agent-state.json` contains no obvious credential/raw-log fields and reports `next_action: null`.
 
+Framework `0.2.1` adds `muk review-code` / `speckit.moodle.review-code`: a single read-only command that refreshes inventory, scans YAML-configured custom-code paths through the existing `moodle.plugins` capability and produces a bounded `code-review.json` work queue for `compatibility-agent`. It never edits inspected code.
+
+Canonical validation passes with 80 tests. Real read-only execution under `ENAEX-CONFIGURED-CODE-REVIEW-V1` covered all 10 configured targets: 5 direct scans and 5 paths deduplicated under their configured parent, with no uncovered target. It queued 90 warning groups and 105 explicit manual-review items; no source content or obvious credential fields were persisted. `safety.allow_mutation` remained false.
+
 ## Safety invariants
 
 - `safety.allow_mutation: false` during current validation.

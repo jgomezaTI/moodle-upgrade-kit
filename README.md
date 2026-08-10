@@ -133,6 +133,7 @@ runs/<run-id>/
 ├── inventory-before.json
 ├── compatibility.json
 ├── plugins.json
+├── code-review.json
 ├── baseline-before.json
 ├── endpoints-before.json
 ├── logs-before.json
@@ -167,6 +168,22 @@ muk orchestrate \
 The result is written to `agent-state.json` with one of four statuses: `action_required`, `human_gate`, `blocked`, or `complete`. It always sets `executes_automatically: false` for delegated actions.
 
 Only `upgrade-agent` owns `moodle.upgrade`; only `rollback-agent` owns `moodle.rollback`; the orchestrator owns no capability. Approval inputs cannot override machine blockers, enable mutation or invent environment commands. See `docs/AGENT_ARCHITECTURE.md`.
+
+### Start configured-code review
+
+Use one command to refresh read-only inventory, inspect the folders declared under `custom_code.paths` and `plugins.custom_paths`, run the existing plugin/custom-code analyzer and prepare the compatibility agent queue:
+
+```bash
+muk review-code \
+  --config "$CONFIG" \
+  --run-id "$RUN_ID"
+```
+
+It writes `inventory-before.json`, `plugins.json` and `code-review.json`. The review artifact records each configured target as `scanned`, `covered-by-parent` or `not-scanned`, then exposes bounded findings in deterministic `review_rank` order. Use `--reuse-inventory` only when deliberately reusing inventory from the same run.
+
+The terminal prints a compact summary plus the first pending review. Add `--full-output` only when the complete queue is also needed on stdout; `code-review.json` always retains it.
+
+In a Spec Kit integration, invoke `speckit.moodle.review-code`; the `compatibility-agent` will work through that queue and propose corrections. Source changes still require explicit user authorization.
 
 ## Spec Kit alignment
 

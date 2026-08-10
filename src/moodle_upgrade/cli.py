@@ -19,6 +19,7 @@ from .evidence import read_json, run_dir, write_json
 from .inventory import collect_inventory
 from .logs import analyze_log_sources
 from .plugins import analyze_plugins
+from .review import build_code_review_queue
 from .rollback import execute_rollback, render_rollback_plan
 from .upgrade import execute_upgrade, render_upgrade_plan
 from .validate import validate_upgrade
@@ -87,6 +88,44 @@ def cmd_plugins(args):
     write_json(rd / "plugins.json", result)
     _json_print(result)
     return 2 if result.get("summary", {}).get("critical", 0) else 0
+
+
+def cmd_review_code(args):
+    cfg = load_config(args.config)
+    rd = run_dir(args.run_id)
+    inventory_path = rd / "inventory-before.json"
+    inventory_refreshed = not args.reuse_inventory or not inventory_path.is_file()
+    if inventory_refreshed:
+        inventory = collect_inventory(cfg)
+        write_json(inventory_path, inventory)
+        write_json(rd / "inventory.json", inventory)
+    else:
+        inventory = read_json(inventory_path)
+
+    plugins = analyze_plugins(cfg, inventory)
+    write_json(rd / "plugins.json", plugins)
+    review = build_code_review_queue(cfg, plugins)
+    review["inventory_refreshed"] = inventory_refreshed
+    write_json(rd / "code-review.json", review)
+    if args.full_output:
+        output = review
+    else:
+        queue = review.get("review_queue", []) or []
+        output = {
+            "agent": review.get("agent"),
+            "status": review.get("status"),
+            "effect": review.get("effect"),
+            "inventory_refreshed": inventory_refreshed,
+            "evidence": {
+                "inventory": str(inventory_path),
+                "plugins": str(rd / "plugins.json"),
+                "code_review": str(rd / "code-review.json"),
+            },
+            "summary": review.get("summary", {}),
+            "next_review": queue[0] if queue else None,
+        }
+    _json_print(output)
+    return 0 if review.get("summary", {}).get("coverage_complete", False) else 2
 
 
 def cmd_endpoints(args):
@@ -232,6 +271,13 @@ def build_parser():
     command.add_argument("--run-id", required=True)
     command.add_argument("--phase", choices=["before", "after"], default="before")
     command.set_defaults(func=cmd_inventory)
+
+    command = sub.add_parser("review-code")
+    command.add_argument("--config", required=True)
+    command.add_argument("--run-id", required=True)
+    command.add_argument("--reuse-inventory", action="store_true")
+    command.add_argument("--full-output", action="store_true")
+    command.set_defaults(func=cmd_review_code)
 
     for name, func in [("compatibility", cmd_compatibility), ("plugins", cmd_plugins), ("baseline", cmd_baseline), ("backup", cmd_backup), ("document", cmd_document)]:
         command = sub.add_parser(name)

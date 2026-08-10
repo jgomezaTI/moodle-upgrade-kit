@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 - 2026-08-09
+
+- Added `muk review-code` and `speckit.moodle.review-code` as a read-only one-command entry point for YAML-configured custom-code review.
+- Added bounded `code-review.json` evidence with configured-folder coverage and a compatibility-agent work queue.
+
 ## 0.2.0 - 2026-08-09
 
 - Added seven portable agent contracts with unique deterministic capability ownership.
