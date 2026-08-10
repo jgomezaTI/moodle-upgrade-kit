@@ -105,7 +105,7 @@ covered_scan_path_count: 5
 ready: false
 ```
 
-Those raw counts are not trustworthy as final blocker counts because the run exposed another scanner defect: PHP-specific patterns were matching JavaScript `.split()` and `.each()` calls.
+Those raw counts exposed a scanner defect: PHP-specific patterns were matching JavaScript `.split()` and `.each()` calls.
 
 Observed analysis:
 
@@ -114,51 +114,67 @@ Observed analysis:
 381 / 384 php_each_removed warnings were in .js files
 ```
 
-PR #9 (`fix: scope PHP compatibility patterns to PHP files`) contains the fix and passing regression tests. At the time of this status update it is open, draft and mergeable.
+PR #10 (`fix: scope PHP patterns to executable regions`) is merged. The corrected real scan contains no PHP-only finding in JavaScript, comments, string literals or embedded JavaScript regions.
+
+The current branch `agent/generic-core-reference` implements generic source-core classification. The capability consumes a configured local Git repository/ref/tree root, verifies its Moodle identity exactly against inventory and performs bounded content comparisons. No source or target Moodle version is hard-coded.
+
+Canonical validation on the branch:
+
+```text
+pytest: 51 passed
+validate-config configs/example.yml: OK
+```
+
+Real read-only validation against Enaex used official Moodle tag `v3.11.18`, commit `375a1163378f4fd5af36aa633c08c0431c9ad74b`, only as the exact source-version fixture:
+
+```text
+critical: 0
+warning: 2396
+risk_hit_count: 2395
+plugin_count: 105
+review_count: 8
+scan_root_count: 12
+covered_scan_path_count: 6
+core: 97
+core-modified: 1
+non-core: 5
+custom: 2
+ready: true
+```
+
+The single core-modified plugin is `mod/feedback`; its changed file is `mod/feedback/complete.php`. The five non-core plugins are `blocks/messages`, `blocks/resetcompletion`, `auth/fc`, `auth/saml2` and `auth/ws`. The two explicit custom plugins are `local/portalcentral` and `local/postulacion`.
+
+The wider deterministic scan found two executable `create_function()` uses and one executable `each()` use in `auth/saml2`. These are real warnings, not the previous source-scope false positives. Nine modified or missing core files are surfaced for review.
+
+Evidence checks confirmed:
+
+- no PHP-only finding in `.js` files;
+- overlapping batch paths remain deduplicated;
+- the configured source-core identity matches inventory exactly;
+- no obvious secrets appear in `plugins.json`.
+
+The previous plugin evidence is preserved as `plugins-pre-core-reference.json` in the same ignored run directory.
 
 ## Exact next step
 
 Do not rerun inventory or compatibility.
 
-After PR #9 is merged by the user:
-
-```bash
-cd ~/proyectos/lms-enaex-espanol/moodle-upgrade-kit
-git checkout main
-git pull origin main
-
-RUN_ID=ENAEX-311-TO-410-CRITICAL-PATH-V2
-CONFIG=configs/environments/lms-enaex-espanol.local.yml
-
-cp "runs/$RUN_ID/plugins.json" "runs/$RUN_ID/plugins-pre-pr9.json"
-
-muk plugins \
-  --config "$CONFIG" \
-  --run-id "$RUN_ID"
-```
-
-Then verify:
-
-- no PHP-only finding is attached to `.js` files;
-- batch overlap deduplication remains correct;
-- remaining critical findings are PHP/include candidates only;
-- no secrets appear in evidence.
-
-Any new scanner defect must become a regression test before advancing.
+1. Review and publish the focused generic source-core-reference change through its own PR. Do not merge it without explicit user instruction.
+2. Group/prioritize repeated high-volume warnings by rule and file without discarding individual finding evidence or changing stable finding IDs.
+3. Rerun only `moodle.plugins`; convert any new scanner defect into a deterministic regression test.
+4. When plugin evidence is usable, continue with real baseline/endpoints/database/logs validation.
 
 ## Work after plugin evidence is trustworthy
 
 In order:
 
 ```text
-1. Review remaining real PHP critical candidates.
-2. Improve exact core-vs-custom plugin classification/reference to reduce 105 manual-review entries.
-3. Group/prioritize noisy repeated warnings such as hard-coded mdl_ prefix findings.
-4. Validate baseline/endpoints/database/logs against the real environment.
-5. Configure the actual local base URL and DB validation environment variables/checks.
-6. Validate backup verification against real backup conventions.
-7. Prove upgrade remains blocked while compatibility/Git/other machine gates fail.
-8. Only then begin the agent layer.
+1. Group/prioritize noisy repeated warnings such as hard-coded `mdl_` prefix findings.
+2. Validate baseline/endpoints/database/logs against the real environment.
+3. Configure the actual local base URL and DB validation environment variables/checks.
+4. Validate backup verification against real backup conventions.
+5. Prove upgrade remains blocked while compatibility/Git/other machine gates fail.
+6. Only then begin the agent layer.
 ```
 
 Do not change PHP simply to make compatibility pass yet. Do not run a real upgrade or rollback.

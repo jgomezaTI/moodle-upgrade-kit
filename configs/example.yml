@@ -67,8 +67,16 @@ plugins:
   compatibility: {}
   ignore:
     - mod/forum
-  # Optional Git reference containing a known-clean core baseline.
-  core_reference_ref: null
+  # Optional local, known-clean Git source-core reference. The capability
+  # verifies its version.php against inventory before classifying components.
+  # It never fetches refs or writes to either repository.
+  # core_reference:
+  #   repository: /srv/moodle-upstream
+  #   ref: v4.5.7  # Must exactly match the inventoried source release.
+  #   root: .
+  #   max_files: 100000
+  #   max_files_per_component: 20000
+  #   max_changed_files: 5000
 
 custom_code:
   paths: []

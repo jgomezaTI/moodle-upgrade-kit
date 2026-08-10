@@ -187,72 +187,88 @@ These are candidates only until the corrected scanner is rerun.
 
 The same run also showed high-volume warnings such as hard-coded `mdl_` prefixes and legacy user-contact fields. Those counts should eventually be grouped/prioritized rather than treated as thousands of independent tasks.
 
-## Current PR — PR #9
+## PHP pattern-scope fixes — merged
 
-PR #9 is the current development item:
+PR #10 is merged into `main`:
 
 ```text
-fix: scope PHP compatibility patterns to PHP files
-branch: agent/php-pattern-file-scope
+fix: scope PHP patterns to executable regions
+merge commit: ce7d979
 ```
 
-At the time of this handoff:
+Validated outcomes:
 
-- PR is open and draft;
-- PR is mergeable;
-- GitHub Actions pass;
-- PHP-only rules are scoped to `.php` / `.inc`;
+- PHP-only rules apply to executable PHP regions in `.php` / `.inc`;
+- embedded HTML/JavaScript, comments and string literals remain masked;
 - SQL/schema coupling rules remain applicable to PHP/include/SQL;
-- the previous combined `ereg|split` detector is separated into stable `php_ereg_removed` and `php_split_removed` findings;
-- regression tests prove JavaScript `.split()` / `.each()` do not produce PHP compatibility findings while real PHP calls still do.
+- `php_ereg_removed` and `php_split_removed` retain distinct stable IDs;
+- the real rerun reported no PHP-only findings in `.js` files;
+- the remaining real PHP warning in the previously scanned roots was `php_each_removed` in `portal_v3/lib/fpdi/fpdi.php:563`.
 
-Do not duplicate this work in another branch.
+## Current development item — generic source-core reference
+
+Current branch:
+
+```text
+agent/generic-core-reference
+```
+
+The branch adds a generic, local and read-only source-core reference contract. It does not contain an Enaex or Moodle-version-specific default.
+
+Implemented behavior:
+
+- accepts a local Git repository, ref and tree root;
+- verifies the reference `version.php` release, numeric version and branch against inventory;
+- compares bounded content manifests;
+- classifies candidates as `core`, `core-modified`, `non-core`, explicit `custom` or `unclassified`;
+- scans non-core and core-modified components in addition to explicit custom code;
+- never clones, fetches, checks out or writes Git metadata;
+- preserves the previous `core_reference_ref` shorthand.
+
+Canonical local validation:
+
+```text
+pytest: 51 passed
+validate-config configs/example.yml: OK
+```
+
+Real read-only validation used the official Moodle `v3.11.18` commit only as the Enaex source-version fixture:
+
+```text
+official commit: 375a1163378f4fd5af36aa633c08c0431c9ad74b
+reference files: 22335
+core: 97
+core-modified: 1
+non-core: 5
+custom: 2
+manual review: 8 (previously 105)
+critical: 0
+warning: 2396
+risk hits: 2395
+```
+
+The core-modified plugin is `mod/feedback`, with `mod/feedback/complete.php` changed. Five non-core components are `blocks/messages`, `blocks/resetcompletion`, `auth/fc`, `auth/saml2` and `auth/ws`.
+
+The expanded scan found real executable warnings in `auth/saml2`: two `create_function()` uses and one `each()` use. These are not JavaScript/comment false positives. The complete source-core comparison reports nine modified or missing core files.
+
+The prior evidence is preserved as:
+
+```text
+runs/ENAEX-311-TO-410-CRITICAL-PATH-V2/plugins-pre-core-reference.json
+```
 
 ## Exact next step
 
-1. Inspect PR #9 and its CI.
-2. If the human user has already merged it, pull `main`; otherwise do not merge without explicit user instruction.
-3. Preserve the current pre-PR9 result if it still exists:
+1. Review and publish the focused generic source-core-reference change through its own PR; do not merge without explicit user instruction.
+2. Group/prioritize the high-volume repeated warnings by rule and file while preserving individual findings and stable IDs in evidence.
+3. Rerun only `moodle.plugins` and convert any newly exposed scanner defect into a regression test.
+4. Once plugin evidence is usable, move to real baseline/endpoints/database/logs validation.
+5. Configure the real base URL and database validation environment-variable/check definitions.
+6. Validate backup verification against the real environment.
+7. Prove `muk upgrade --approved` remains blocked while compatibility, Git or another machine gate fails.
+8. Only after those deterministic gates are stable, implement the agent layer.
 
-```bash
-RUN_ID=ENAEX-311-TO-410-CRITICAL-PATH-V2
-cp "runs/$RUN_ID/plugins.json" "runs/$RUN_ID/plugins-pre-pr9.json"
-```
-
-4. Rerun only the plugin gate:
-
-```bash
-CONFIG=configs/environments/lms-enaex-espanol.local.yml
-RUN_ID=ENAEX-311-TO-410-CRITICAL-PATH-V2
-
-muk plugins \
-  --config "$CONFIG" \
-  --run-id "$RUN_ID"
-```
-
-5. Validate the corrected evidence:
-   - no PHP-only findings in `.js` files;
-   - overlapping batch paths still deduplicated;
-   - remaining criticals are PHP/include candidates only;
-   - no secrets appear in evidence.
-6. Turn any new scanner defect into a deterministic regression test before advancing.
-
-## After the corrected plugin rerun
-
-The next work order is:
-
-```text
-A. Review remaining real PHP critical candidates.
-B. Improve core-vs-custom plugin classification/reference so 105 plugins are not all manual-review noise.
-C. Decide whether high-volume warnings should be grouped by file/rule for usable evidence.
-D. Once `moodle.plugins` evidence is trustworthy, move to baseline/database/logs.
-E. Configure the real base URL and DB validation environment variables/checks.
-F. Validate backup verification against the real environment.
-G. Prove `muk upgrade --approved` remains blocked while compatibility is false / Git dirty / other gates fail.
-H. Only after deterministic real-environment gates are stable, implement the agent layer.
-```
-
-Do not jump directly to changing PHP, running an upgrade, rollback, or implementing agents.
+Do not change PHP merely to make compatibility green. Do not run upgrade, rollback or implement agents yet.
 
 ## Agent layer — future work, not current gate
 
@@ -291,8 +307,9 @@ Agent work starts only after the deterministic read-only layer has completed the
 Read AGENTS.md, docs/CODEX_HANDOFF.md, docs/CRITICAL_PATH_STATUS.md,
 and skills/moodle.plugins/SKILL.md first.
 
-Then inspect the current Git branch, main, PR #9 if available locally/remotely,
-and the evidence under runs/ENAEX-311-TO-410-CRITICAL-PATH-V2 if present.
+Then inspect the current Git branch, main, the generic source-core-reference
+development item, and the evidence under
+runs/ENAEX-311-TO-410-CRITICAL-PATH-V2 if present.
 
 Summarize what is already validated and identify the exact next step on the
 critical path. Do not modify anything yet. Do not broaden scope. Do not run

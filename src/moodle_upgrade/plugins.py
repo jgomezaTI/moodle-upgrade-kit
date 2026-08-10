@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import asdict, dataclass
+import hashlib
+import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
 import subprocess
 from typing import Any, Iterable
@@ -12,6 +15,9 @@ DEFAULT_EXCLUDE_DIRS = {".git", "vendor", "node_modules", ".venv", "moodledata"}
 PHP_SOURCE_EXTENSIONS = (".php", ".inc")
 SQL_AWARE_EXTENSIONS = (".php", ".inc", ".sql")
 PHP_CODE_VIEW = "php-code"
+DEFAULT_CORE_REFERENCE_MAX_FILES = 100_000
+DEFAULT_CORE_COMPONENT_MAX_FILES = 20_000
+DEFAULT_CORE_CHANGE_EVIDENCE_LIMIT = 5_000
 
 
 @dataclass
@@ -21,6 +27,23 @@ class Finding:
     message: str
     path: str | None = None
     line: int | None = None
+
+
+@dataclass
+class CoreReference:
+    repository: Path
+    ref: str
+    root: str
+    commit: str
+    object_format: str
+    moodle_version: dict[str, str | None]
+    manifest: dict[str, str]
+
+
+class CoreReferenceError(RuntimeError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
 
 
 RISK_PATTERNS: tuple[dict[str, Any], ...] = (
@@ -285,18 +308,277 @@ def _scan_path(root: Path, display_root: Path, target_version: str, max_files: i
     return hits, {"scanned_files": scanned_files, "truncated_files": truncated_files, "max_files": max_files, "max_bytes_per_file": max_bytes}
 
 
-def _git_diff_names(repo_root: Path, reference: str, moodle_root: Path) -> list[str] | None:
+def _valid_git_ref(value: str) -> bool:
+    if not value or value.startswith("-") or value.endswith(("/", ".")):
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", value):
+        return False
+    return not any(fragment in value for fragment in ("..", "//", "@{"))
+
+
+def _normalize_tree_root(value: str | None) -> str:
+    raw = str(value or ".").strip().replace("\\", "/")
+    if raw in {"", "."}:
+        return ""
+    path = PurePosixPath(raw)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise CoreReferenceError("CORE_REFERENCE_INVALID", "Core reference root must be a relative Git tree path without traversal.")
+    return path.as_posix().rstrip("/")
+
+
+def _valid_component_path(value: str) -> bool:
+    path = PurePosixPath(value)
+    return bool(value) and not path.is_absolute() and all(part not in {"", ".", ".."} for part in path.parts)
+
+
+def _reference_path(root: str, relative: str) -> str:
+    return f"{root}/{relative}" if root else relative
+
+
+def _git_reference_command(repository: Path, args: list[str], *, binary: bool = False, timeout: int = 60) -> subprocess.CompletedProcess:
     try:
-        relative = moodle_root.resolve().relative_to(repo_root.resolve())
-    except ValueError:
-        return None
-    try:
-        proc = subprocess.run(["git", "diff", "--name-only", reference, "--", str(relative)], cwd=repo_root, capture_output=True, text=True, timeout=20, check=False)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
+        return subprocess.run(
+            ["git", "-C", str(repository), *args],
+            capture_output=True,
+            text=not binary,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CoreReferenceError("CORE_REFERENCE_UNAVAILABLE", f"Could not inspect configured core reference: {exc.__class__.__name__}.") from exc
+
+
+def _parse_moodle_version_text(text: str) -> dict[str, str | None]:
+    patterns = {
+        "release": r"\$release\s*=\s*['\"]([^'\"]+)['\"]",
+        "version": r"\$version\s*=\s*([0-9.]+)",
+        "branch": r"\$branch\s*=\s*['\"]([^'\"]+)['\"]",
+    }
+    return {
+        key: match.group(1).strip() if (match := re.search(pattern, text)) else None
+        for key, pattern in patterns.items()
+    }
+
+
+def _git_tree_manifest(repository: Path, commit: str, root: str, max_files: int) -> dict[str, str]:
+    args = ["ls-tree", "-r", "-z", "--full-tree", commit]
+    if root:
+        args.extend(["--", root])
+    proc = _git_reference_command(repository, args, binary=True)
     if proc.returncode != 0:
+        raise CoreReferenceError("CORE_REFERENCE_UNAVAILABLE", "Could not list files from configured core reference.")
+
+    prefix = f"{root}/" if root else ""
+    manifest: dict[str, str] = {}
+    for raw_entry in proc.stdout.split(b"\0"):
+        if not raw_entry:
+            continue
+        metadata, separator, raw_path = raw_entry.partition(b"\t")
+        fields = metadata.split()
+        if not separator or len(fields) < 3 or fields[1] != b"blob":
+            continue
+        path = raw_path.decode("utf-8", errors="surrogateescape")
+        if prefix and not path.startswith(prefix):
+            continue
+        relative = path[len(prefix):] if prefix else path
+        manifest[relative] = fields[2].decode("ascii")
+        if len(manifest) > max_files:
+            raise CoreReferenceError(
+                "CORE_REFERENCE_LIMIT_EXCEEDED",
+                f"Configured core reference exceeds the {max_files} file comparison limit.",
+            )
+    return manifest
+
+
+def _core_reference_settings(cfg: dict[str, Any], inventory: dict[str, Any], moodle_root: Path) -> dict[str, Any] | None:
+    structured = cfg.get("core_reference")
+    legacy_ref = cfg.get("core_reference_ref")
+    repo_root_text = inventory.get("platform", {}).get("git", {}).get("repo_root")
+
+    if structured is not None:
+        if not isinstance(structured, dict):
+            raise CoreReferenceError("CORE_REFERENCE_INVALID", "plugins.core_reference must be a mapping.")
+        repository_text = structured.get("repository") or repo_root_text
+        return {
+            "repository": repository_text,
+            "ref": structured.get("ref"),
+            "root": structured.get("root", "."),
+            "max_files": int(structured.get("max_files", DEFAULT_CORE_REFERENCE_MAX_FILES)),
+            "max_files_per_component": int(structured.get("max_files_per_component", DEFAULT_CORE_COMPONENT_MAX_FILES)),
+            "max_changed_files": int(structured.get("max_changed_files", DEFAULT_CORE_CHANGE_EVIDENCE_LIMIT)),
+            "legacy": False,
+        }
+
+    if not legacy_ref:
         return None
-    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    if not repo_root_text:
+        raise CoreReferenceError("CORE_REFERENCE_UNAVAILABLE", "Inventory does not contain the project Git root required by plugins.core_reference_ref.")
+    try:
+        tree_root = moodle_root.relative_to(Path(repo_root_text).expanduser().resolve()).as_posix()
+    except ValueError as exc:
+        raise CoreReferenceError("CORE_REFERENCE_INVALID", "Moodle root is outside the inventory Git repository.") from exc
+    return {
+        "repository": repo_root_text,
+        "ref": legacy_ref,
+        "root": tree_root,
+        "max_files": DEFAULT_CORE_REFERENCE_MAX_FILES,
+        "max_files_per_component": DEFAULT_CORE_COMPONENT_MAX_FILES,
+        "max_changed_files": DEFAULT_CORE_CHANGE_EVIDENCE_LIMIT,
+        "legacy": True,
+    }
+
+
+def _prepare_core_reference(
+    cfg: dict[str, Any], inventory: dict[str, Any], moodle_root: Path,
+) -> tuple[CoreReference | None, dict[str, Any] | None, Finding | None, dict[str, Any] | None]:
+    try:
+        settings = _core_reference_settings(cfg, inventory, moodle_root)
+    except (CoreReferenceError, TypeError, ValueError) as exc:
+        error = exc if isinstance(exc, CoreReferenceError) else CoreReferenceError("CORE_REFERENCE_INVALID", "Core reference limits must be positive integers.")
+        return None, {"configured": True, "verified": False, "status": "invalid"}, Finding("warning", error.code, str(error)), None
+    if settings is None:
+        return None, None, None, None
+
+    evidence: dict[str, Any] = {
+        "configured": True,
+        "verified": False,
+        "status": "unavailable",
+        "repository": str(settings.get("repository") or ""),
+        "ref": str(settings.get("ref") or ""),
+        "root": str(settings.get("root") or "."),
+    }
+    try:
+        repository_text = settings.get("repository")
+        ref = str(settings.get("ref") or "")
+        if not repository_text or not Path(str(repository_text)).expanduser().is_absolute():
+            raise CoreReferenceError("CORE_REFERENCE_INVALID", "Core reference repository must be an absolute local path.")
+        if not _valid_git_ref(ref):
+            raise CoreReferenceError("CORE_REFERENCE_INVALID", "Core reference ref contains unsupported or unsafe characters.")
+        root = _normalize_tree_root(str(settings.get("root") or "."))
+        for limit_name in ("max_files", "max_files_per_component", "max_changed_files"):
+            if int(settings[limit_name]) <= 0:
+                raise CoreReferenceError("CORE_REFERENCE_INVALID", f"Core reference {limit_name} must be positive.")
+
+        repository = Path(str(repository_text)).expanduser().resolve()
+        revision = _git_reference_command(repository, ["rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}"])
+        if revision.returncode != 0:
+            raise CoreReferenceError("CORE_REFERENCE_UNAVAILABLE", "Configured core reference ref cannot be resolved locally.")
+        commit = revision.stdout.strip()
+        version_path = _reference_path(root, "version.php")
+        version_proc = _git_reference_command(repository, ["cat-file", "blob", f"{commit}:{version_path}"], binary=True)
+        if version_proc.returncode != 0:
+            raise CoreReferenceError("CORE_REFERENCE_UNAVAILABLE", "Configured core reference does not contain Moodle version.php at its configured root.")
+        reference_version = _parse_moodle_version_text(version_proc.stdout.decode("utf-8", errors="ignore"))
+        inventory_version = inventory.get("identity", {}).get("moodle_version", {}) or {}
+        evidence["reference_moodle_version"] = reference_version
+        evidence["inventory_moodle_version"] = {
+            key: inventory_version.get(key) for key in ("release", "version", "branch")
+        }
+        comparable_keys = ("release", "version", "branch")
+        if not all(inventory_version.get(key) for key in comparable_keys):
+            raise CoreReferenceError("CORE_REFERENCE_VERSION_UNKNOWN", "Inventory does not contain enough Moodle version data to verify the core reference.")
+        mismatched = [key for key in comparable_keys if str(reference_version.get(key) or "") != str(inventory_version.get(key) or "")]
+        if mismatched:
+            raise CoreReferenceError(
+                "CORE_REFERENCE_VERSION_MISMATCH",
+                f"Configured core reference does not exactly match inventory Moodle version fields: {', '.join(mismatched)}.",
+            )
+        object_format_proc = _git_reference_command(repository, ["rev-parse", "--show-object-format"])
+        object_format = object_format_proc.stdout.strip() if object_format_proc.returncode == 0 else "sha1"
+        if object_format not in hashlib.algorithms_available:
+            raise CoreReferenceError("CORE_REFERENCE_UNAVAILABLE", f"Unsupported Git object format: {object_format}.")
+        manifest = _git_tree_manifest(repository, commit, root, int(settings["max_files"]))
+        if not manifest:
+            raise CoreReferenceError("CORE_REFERENCE_UNAVAILABLE", "Configured core reference tree is empty.")
+    except CoreReferenceError as exc:
+        evidence["status"] = {
+            "CORE_REFERENCE_INVALID": "invalid",
+            "CORE_REFERENCE_VERSION_MISMATCH": "version-mismatch",
+            "CORE_REFERENCE_VERSION_UNKNOWN": "version-unknown",
+            "CORE_REFERENCE_LIMIT_EXCEEDED": "limit-exceeded",
+        }.get(exc.code, "unavailable")
+        return None, evidence, Finding("warning", exc.code, str(exc)), settings
+
+    reference = CoreReference(repository, ref, root, commit, object_format, reference_version, manifest)
+    evidence.update({
+        "verified": True,
+        "status": "verified",
+        "repository": str(repository),
+        "ref": ref,
+        "root": root or ".",
+        "commit": commit,
+        "moodle_version": reference_version,
+        "file_count": len(manifest),
+    })
+    return reference, evidence, None, settings
+
+
+def _git_blob_oid(path: Path, object_format: str) -> str | None:
+    try:
+        if path.is_symlink():
+            data = os.readlink(path).encode("utf-8", errors="surrogateescape")
+        elif path.is_file():
+            data = path.read_bytes()
+        else:
+            return None
+    except OSError:
+        return None
+    digest = hashlib.new(object_format)
+    digest.update(f"blob {len(data)}\0".encode("ascii"))
+    digest.update(data)
+    return digest.hexdigest()
+
+
+def _local_component_manifest(root: Path, component_path: str, object_format: str, max_files: int) -> dict[str, str] | None:
+    component_root = root.joinpath(*PurePosixPath(component_path).parts)
+    if not component_root.is_dir():
+        return {}
+    manifest: dict[str, str] = {}
+    for path in sorted(component_root.rglob("*")):
+        if not (path.is_file() or path.is_symlink()):
+            continue
+        relative = path.relative_to(root).as_posix()
+        oid = _git_blob_oid(path, object_format)
+        if oid is None:
+            return None
+        manifest[relative] = oid
+        if len(manifest) > max_files:
+            return None
+    return manifest
+
+
+def _compare_component(
+    reference: CoreReference, moodle_root: Path, component_path: str, max_files: int, max_changed_files: int,
+) -> dict[str, Any]:
+    if not _valid_component_path(component_path):
+        return {"status": "unavailable", "reason": "Component path is not a safe relative path."}
+    prefix = f"{component_path.rstrip('/')}/"
+    reference_manifest = {path: oid for path, oid in reference.manifest.items() if path.startswith(prefix)}
+    if not reference_manifest:
+        return {"status": "absent", "changed_file_count": 0, "changed_files": []}
+    local_manifest = _local_component_manifest(moodle_root, component_path, reference.object_format, max_files)
+    if local_manifest is None:
+        return {"status": "unavailable", "reason": "Local component comparison limit exceeded or a file could not be read."}
+    changed = sorted(path for path in set(reference_manifest) | set(local_manifest) if reference_manifest.get(path) != local_manifest.get(path))
+    return {
+        "status": "exact-match" if not changed else "modified",
+        "changed_file_count": len(changed),
+        "changed_files": changed[:max_changed_files],
+        "changed_files_truncated": len(changed) > max_changed_files,
+    }
+
+
+def _compare_core_files(reference: CoreReference, moodle_root: Path, max_changed_files: int) -> tuple[list[str], int]:
+    changed: list[str] = []
+    count = 0
+    for relative, expected_oid in reference.manifest.items():
+        actual_oid = _git_blob_oid(moodle_root.joinpath(*PurePosixPath(relative).parts), reference.object_format)
+        if actual_oid == expected_oid:
+            continue
+        count += 1
+        if len(changed) < max_changed_files:
+            changed.append(relative)
+    return changed, count
 
 
 def _scan_path_covers(parent: Path, child: Path) -> bool:
@@ -347,32 +629,73 @@ def analyze_plugins(config: dict[str, Any], inventory: dict[str, Any]) -> dict[s
     target = config.get("moodle", {}).get("target_version") or inventory.get("identity", {}).get("target_version")
     root = Path(config["moodle"]["root"]).expanduser().resolve()
     findings: list[Finding] = []
-    plugins: list[dict[str, Any]] = []
+    plugins: list[dict[str, Any]] = [dict(plugin) for plugin in inventory.get("plugins", [])]
     review: list[dict[str, Any]] = []
     cfg = config.get("plugins", {})
     compatibility_map = cfg.get("compatibility", {}) or {}
     ignore = set(cfg.get("ignore", []) or [])
 
-    for plugin in inventory.get("plugins", []):
-        item = dict(plugin)
+    reference, reference_evidence, reference_finding, reference_settings = _prepare_core_reference(cfg, inventory, root)
+    if reference_finding:
+        findings.append(reference_finding)
+
+    if reference and reference_settings:
+        component_limit = int(reference_settings["max_files_per_component"])
+        changed_limit = int(reference_settings["max_changed_files"])
+        for item in plugins:
+            path = item.get("component_path")
+            if not path:
+                continue
+            comparison = _compare_component(reference, root, str(path), component_limit, changed_limit)
+            item["core_reference_comparison"] = comparison
+            status = comparison["status"]
+            if item.get("classification") == "custom":
+                continue
+            if status == "exact-match":
+                item["classification"] = "core"
+                item["classification_reason"] = "exact content match with verified source-core reference"
+            elif status == "modified":
+                item["classification"] = "core-modified"
+                item["classification_reason"] = "component exists in verified source core but local content differs"
+            elif status == "absent":
+                item["classification"] = "non-core"
+                item["classification_reason"] = "component is absent from verified source-core reference"
+            else:
+                item["classification"] = "unclassified"
+                item["classification_reason"] = "component comparison with verified source core was unavailable"
+                findings.append(Finding(
+                    "warning",
+                    "CORE_COMPONENT_COMPARE_UNAVAILABLE",
+                    "Could not complete bounded comparison for plugin component.",
+                    str(path),
+                ))
+
+    for item in plugins:
         path = item.get("component_path")
         if not path or path in ignore:
             item["review_status"] = "ignored"
-            plugins.append(item)
             continue
         declared = compatibility_map.get(path, [])
         if isinstance(declared, str):
             declared = [declared]
         branch = ".".join(str(target).split(".")[:2]) if target else None
-        if declared and branch in {str(value) for value in declared}:
+        classification = item.get("classification")
+        comparison_status = item.get("core_reference_comparison", {}).get("status")
+        if classification == "core" and comparison_status == "exact-match":
+            item["review_status"] = "core-reference-match"
+        elif declared and branch in {str(value) for value in declared}:
             item["review_status"] = "declared-compatible"
-        elif item.get("classification") == "custom":
+        elif classification in {"custom", "core-modified", "non-core"}:
             item["review_status"] = "scan-required"
-            review.append({"type": "plugin", "path": path, "reason": "Custom plugin has no declared target compatibility."})
+            reasons = {
+                "custom": "Custom plugin has no declared target compatibility.",
+                "core-modified": "Modified source-core component requires target compatibility review.",
+                "non-core": "Non-core plugin has no declared target compatibility.",
+            }
+            review.append({"type": "plugin", "path": path, "reason": reasons[str(classification)]})
         else:
             item["review_status"] = "core-comparison-required"
             review.append({"type": "plugin", "path": path, "reason": "Plugin remains unclassified until compared with exact Moodle core."})
-        plugins.append(item)
 
     scan_cfg = config.get("custom_code", {}) or {}
     max_files = int(scan_cfg.get("scan_max_files_per_path", 20_000))
@@ -386,10 +709,18 @@ def analyze_plugins(config: dict[str, Any], inventory: dict[str, Any]) -> dict[s
         if resolved:
             scan_targets.append((item.get("path") or resolved, Path(resolved)))
     for plugin in plugins:
-        if plugin.get("classification") != "custom" or plugin.get("review_status") == "ignored":
+        if plugin.get("classification") not in {"custom", "core-modified", "non-core"} or plugin.get("review_status") == "ignored":
             continue
         path = plugin.get("component_path")
+        if not _valid_component_path(str(path)):
+            findings.append(Finding("critical", "PLUGIN_PATH_INVALID", "Plugin component path is not a safe relative path.", str(path)))
+            continue
         candidate = (root / str(path)).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            findings.append(Finding("critical", "PLUGIN_PATH_INVALID", "Plugin component path resolves outside Moodle root.", str(path)))
+            continue
         if candidate.exists():
             scan_targets.append((str(path), candidate))
 
@@ -407,23 +738,31 @@ def analyze_plugins(config: dict[str, Any], inventory: dict[str, Any]) -> dict[s
         findings.append(Finding(hit["severity"], f"CODE_{hit['id'].upper()}", hit["message"], hit["path"], hit["line"]))
 
     core_modifications: list[str] | None = None
-    core_ref = cfg.get("core_reference_ref")
-    repo_root_text = inventory.get("platform", {}).get("git", {}).get("repo_root")
-    if core_ref and repo_root_text:
-        core_modifications = _git_diff_names(Path(repo_root_text), str(core_ref), root)
-        if core_modifications is None:
-            findings.append(Finding("warning", "CORE_DIFF_UNAVAILABLE", f"Could not compare Moodle source against configured Git ref {core_ref}."))
-        elif core_modifications:
-            findings.append(Finding("warning", "CORE_DIFF_PRESENT", f"Git reports {len(core_modifications)} files changed from configured core reference; review whether they are expected customizations."))
+    core_modification_count: int | None = None
+    core_modifications_truncated = False
+    core_ref = reference_evidence.get("ref") if reference_evidence else cfg.get("core_reference_ref")
+    if reference and reference_settings:
+        core_modifications, core_modification_count = _compare_core_files(reference, root, int(reference_settings["max_changed_files"]))
+        core_modifications_truncated = core_modification_count > len(core_modifications)
+        if core_modification_count:
+            findings.append(Finding(
+                "warning",
+                "CORE_DIFF_PRESENT",
+                f"Verified source-core comparison found {core_modification_count} modified or missing core files.",
+            ))
 
     counts = Counter(f.severity for f in findings)
+    classifications = Counter(str(plugin.get("classification") or "unclassified") for plugin in plugins)
     return {
         "target_version": target, "plugins": plugins, "custom_code_scans": scan_summaries, "covered_scan_paths": covered_scan_paths, "risk_hits": all_hits,
-        "core_reference_ref": core_ref, "core_modifications": core_modifications, "manual_review": review,
+        "core_reference_ref": core_ref, "core_reference": reference_evidence,
+        "core_modifications": core_modifications, "core_modification_count": core_modification_count,
+        "core_modifications_truncated": core_modifications_truncated, "manual_review": review,
         "findings": [asdict(f) for f in findings],
         "summary": {
             "critical": counts["critical"], "warning": counts["warning"], "info": counts["info"],
             "plugin_count": len(plugins), "risk_hit_count": len(all_hits), "review_count": len(review),
-            "scan_root_count": len(scan_summaries), "covered_scan_path_count": len(covered_scan_paths), "ready": counts["critical"] == 0,
+            "scan_root_count": len(scan_summaries), "covered_scan_path_count": len(covered_scan_paths),
+            "classification_counts": dict(sorted(classifications.items())), "ready": counts["critical"] == 0,
         },
     }
