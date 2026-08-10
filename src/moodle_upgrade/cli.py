@@ -16,7 +16,7 @@ from .document import generate_report
 from .endpoints import run_endpoint_checks
 from .evidence import read_json, run_dir, write_json
 from .inventory import collect_inventory
-from .logs import analyze_files
+from .logs import analyze_log_sources
 from .plugins import analyze_plugins
 from .rollback import execute_rollback, render_rollback_plan
 from .upgrade import execute_upgrade, render_upgrade_plan
@@ -94,17 +94,17 @@ def cmd_endpoints(args):
     results = run_endpoint_checks(cfg)
     write_json(rd / f"endpoints-{args.phase}.json", results)
     _json_print(results)
-    return 0 if all(item.get("ok") for item in results) else 2
+    return 0 if results and all(item.get("executed") and item.get("ok") for item in results) else 2
 
 
 def cmd_logs(args):
     cfg = load_config(args.config)
     rd = run_dir(args.run_id)
     logs_cfg = cfg.get("logs", {})
-    result = analyze_files(logs_cfg.get("files", []), logs_cfg.get("patterns", {}))
+    result = analyze_log_sources(logs_cfg)
     write_json(rd / f"logs-{args.phase}.json", result)
     _json_print(result)
-    return 0
+    return 0 if result.get("summary", {}).get("complete", False) else 2
 
 
 def cmd_database(args):
@@ -113,7 +113,7 @@ def cmd_database(args):
     result = run_database_checks(cfg)
     write_json(rd / f"database-{args.phase}.json", result)
     _json_print(result)
-    return 2 if result.get("summary", {}).get("critical", 0) else 0
+    return 0 if result.get("summary", {}).get("complete", False) else 2
 
 
 def cmd_baseline(args):

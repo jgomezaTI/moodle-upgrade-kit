@@ -155,7 +155,7 @@ Evidence checks confirmed:
 
 The previous plugin evidence is preserved as `plugins-pre-core-reference.json` in the same ignored run directory.
 
-The current branch `agent/plugin-risk-groups` adds derived review indexes while preserving every original finding and stable ID. Real evidence now reduces the review surface from 2395 individual occurrences to 4 rule summaries and 95 rule/scope/file groups without changing any verdict:
+Commit `65fd731` on `main` adds derived review indexes while preserving every original finding and stable ID. Real evidence reduces the review surface from 2395 individual occurrences to 4 rule summaries and 95 rule/scope/file groups without changing any verdict:
 
 ```text
 hardcoded_mdl_prefix:          2152 hits / 63 files / 6 scopes
@@ -176,24 +176,46 @@ Validation confirmed:
 
 The pre-grouping evidence is preserved as `plugins-pre-risk-grouping.json`.
 
+### Baseline/endpoints/database/logs — validated
+
+The real validation exposed a false-success defect: a baseline with no configured endpoint, database or log checks could report `complete: true`. Regression coverage now requires configured and actually executed coverage for all three check classes.
+
+Additional real-environment hardening includes:
+
+- read-only endpoint methods only, with mutating methods rejected before a request;
+- TLS verification by default, with an explicit evidence-bearing exception allowed only outside production for the local self-signed certificate;
+- bounded Docker stdout/stderr log sources using argv-safe container names and no persisted raw log text;
+- read-only database checks that can resolve validated environment-variable names inside the DB container without extracting or persisting their credential values;
+- explicit configured/executed/passed/completeness metadata for standalone checks and baseline evidence.
+
+Real evidence under `ENAEX-311-TO-410-CRITICAL-PATH-V2` now reports:
+
+```text
+endpoints configured/executed: 2 / 2
+database configured/executed: 1 / 1
+log sources configured/executed/readable: 3 / 3 / 3
+critical/warning/info: 0 / 0 / 0
+complete: true
+```
+
+Both HTTPS endpoints returned 200 with the staging-only self-signed TLS exception recorded as `tls_verified: false`. The DB health `SELECT 1` passed. All three Docker log sources were readable with no configured critical/warning signatures. Secret and raw-log field scans were clean.
+
 ## Exact next step
 
 Do not rerun inventory or compatibility.
 
-1. Review and publish the focused risk-grouping change as instructed by the user.
-2. Inspect baseline/endpoints/database/logs contracts, implementation, local configuration and existing evidence.
-3. Configure the actual local base URL and read-only database validation environment variables/checks with explicit user confirmation.
-4. Run and validate baseline/endpoints/database/logs against the real environment.
+1. Publish the focused baseline/endpoints/database/logs hardening and regression coverage.
+2. Inspect and validate `moodle.backup` against the real backup conventions in read-only mode.
+3. Prove the upgrade path remains blocked by compatibility/Git/backup machine gates without executing a real upgrade command sequence.
 
 ## Work after plugin evidence is trustworthy
 
 In order:
 
 ```text
-1. Validate baseline/endpoints/database/logs against the real environment.
-2. Validate backup verification against real backup conventions.
-3. Prove upgrade remains blocked while compatibility/Git/other machine gates fail.
-4. Only then begin the Spec Kit-style agent layer.
+1. Validate backup verification against real backup conventions.
+2. Prove upgrade remains blocked while compatibility/Git/other machine gates fail.
+3. Only then begin the Spec Kit-style agent layer.
 ```
 
 Do not change PHP simply to make compatibility pass yet. Do not run a real upgrade or rollback.

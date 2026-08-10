@@ -2,7 +2,7 @@
 name: moodle.baseline
 description: Capture the pre-upgrade functional state so post-change validation can compare the same checks like-for-like.
 effect: read-only
-version: 0.2.0
+version: 0.2.1
 ---
 
 # moodle.baseline
@@ -34,6 +34,7 @@ Produce one pre-change baseline from proven inventory identity plus endpoint, da
 5. Record cron CLI/configuration state from inventory without running cron.
 6. Persist the definitions used so post-change checks remain like-for-like.
 7. Preserve pre-existing log/database problems as baseline facts rather than automatically calling them regressions.
+8. Require at least one configured and executed endpoint check, database check and readable log source. An empty or entirely unexecuted check class must remain incomplete rather than becoming a successful baseline.
 
 ## Blocking conditions
 
@@ -48,4 +49,5 @@ Produce one pre-change baseline from proven inventory identity plus endpoint, da
 - Read-only only.
 - Never persist credentials.
 - A baseline is complete only when no critical baseline finding remains.
+- A baseline with missing endpoint, database or log coverage is incomplete even when no check produced a failure.
 - Do not convert pre-existing warnings into post-upgrade regressions unless their post state worsens.

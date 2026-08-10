@@ -250,15 +250,15 @@ The prior evidence is preserved as:
 runs/ENAEX-311-TO-410-CRITICAL-PATH-V2/plugins-pre-core-reference.json
 ```
 
-## Current development item — deterministic risk grouping
+## Deterministic risk grouping — published
 
-Current branch:
+Published on `main`:
 
 ```text
-agent/plugin-risk-groups
+65fd731 feat: group plugin risk evidence for review
 ```
 
-The branch adds derived review views without modifying, deduplicating or downgrading individual risk evidence:
+The implementation adds derived review views without modifying, deduplicating or downgrading individual risk evidence:
 
 - summaries by stable rule ID and severity;
 - groups by rule, severity, scan scope and file;
@@ -266,7 +266,7 @@ The branch adds derived review views without modifying, deduplicating or downgra
 - bounded line samples of 20 entries with explicit truncation evidence;
 - explicit evidence that review rank does not affect severity.
 
-Canonical local validation:
+Canonical validation at publication:
 
 ```text
 pytest: 53 passed
@@ -300,15 +300,37 @@ runs/ENAEX-311-TO-410-CRITICAL-PATH-V2/plugins-pre-risk-grouping.json
 
 Verification confirmed `risk_hits`, `findings` and `manual_review` are structurally identical before and after grouping, both derived occurrence totals equal 2395 and no obvious secret appears in evidence.
 
+## Baseline/endpoints/database/logs — validated read-only
+
+The real Enaex baseline exposed and converted these defects into regression coverage:
+
+- an empty baseline previously could report `complete: true` without executing endpoint, database or log checks;
+- endpoint configuration did not restrict mutating HTTP methods or record execution/TLS state;
+- the local self-signed HTTPS endpoint needed an explicit non-production-only TLS verification exception;
+- the real containers expose application logs through bounded Docker stdout/stderr rather than mounted log files;
+- database validation could not safely resolve credential values that exist only inside the database container.
+
+The corrected capability now requires actual coverage for all three baseline classes, rejects mutating HTTP methods before execution, records unverified TLS explicitly, reads Docker logs with a bounded argv-safe command without persisting raw text, and supports resolving validated environment-variable names inside a trusted DB container without extracting their values.
+
+Real read-only evidence under `ENAEX-311-TO-410-CRITICAL-PATH-V2` reports:
+
+```text
+endpoints configured/executed: 2 / 2 (both HTTP 200)
+database configured/executed: 1 / 1 (SELECT 1 health check passed)
+log sources configured/executed/readable: 3 / 3 / 3
+baseline critical/warning/info: 0 / 0 / 0
+baseline complete: true
+TLS verified: false (explicit staging exception for local self-signed HTTPS)
+```
+
+The four generated artifacts contain no obvious secret matches and no raw-log fields. Inventory, compatibility and plugin analysis were not rerun.
+
 ## Exact next step
 
-1. Review and publish the focused deterministic risk-grouping change as instructed by the user.
-2. Inspect the existing baseline/endpoints/database/logs contracts, implementation, local configuration and current evidence without rerunning inventory or compatibility.
-3. Configure the real local base URL and read-only database validation environment-variable/check definitions with explicit user confirmation.
-4. Run and validate baseline/endpoints/database/logs against the real environment.
-5. Validate backup verification against the real environment.
-6. Prove `muk upgrade --approved` remains blocked while compatibility, Git or another machine gate fails.
-7. Only after those deterministic gates are stable, design and implement the Spec Kit-style agent layer.
+1. Publish the focused baseline/endpoints/database/logs hardening and its regression coverage.
+2. Validate backup verification against the real backup conventions without creating, restoring or mutating backups.
+3. Prove the upgrade path remains blocked by machine gates without executing a real upgrade command sequence.
+4. Only after those deterministic gates are stable, design and implement the Spec Kit-style agent layer.
 
 Do not change PHP merely to make compatibility green. Do not run upgrade, rollback or implement agents yet.
 

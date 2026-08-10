@@ -4,6 +4,7 @@ from pathlib import Path
 from pathlib import PurePosixPath
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -39,6 +40,11 @@ def validate_config(data: dict[str, Any]) -> None:
     for key in ("root", "base_url", "target_version"):
         if not moodle.get(key):
             raise ConfigError(f"moodle.{key} is required")
+    parsed_base_url = urlsplit(str(moodle.get("base_url")))
+    if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
+        raise ConfigError("moodle.base_url must be an absolute HTTP(S) URL")
+    if parsed_base_url.username is not None or parsed_base_url.password is not None:
+        raise ConfigError("moodle.base_url must not contain credentials")
 
     runtime_type = runtime.get("type", "local")
     if runtime_type not in ("local", "docker"):
@@ -85,6 +91,91 @@ def validate_config(data: dict[str, Any]) -> None:
                 raise ConfigError(f"plugins.core_reference.{key} must be a positive integer")
     if legacy_core_reference is not None and not isinstance(legacy_core_reference, str):
         raise ConfigError("plugins.core_reference_ref must be a string or null")
+
+    endpoints = data.get("endpoints", []) or []
+    if not isinstance(endpoints, list):
+        raise ConfigError("endpoints must be a list")
+    endpoint_ids: set[str] = set()
+    for endpoint in endpoints:
+        if not isinstance(endpoint, dict):
+            raise ConfigError("each endpoint must be a mapping")
+        endpoint_id = str(endpoint.get("id") or "")
+        if not endpoint_id or endpoint_id in endpoint_ids:
+            raise ConfigError("endpoint IDs must be non-empty and unique")
+        endpoint_ids.add(endpoint_id)
+        method = str(endpoint.get("method", "GET")).upper()
+        if method not in {"GET", "HEAD", "OPTIONS"}:
+            raise ConfigError("endpoint methods must be read-only: GET, HEAD or OPTIONS")
+        path = endpoint.get("path", "/")
+        if not isinstance(path, str) or urlsplit(path).scheme or urlsplit(path).netloc:
+            raise ConfigError("endpoint paths must be relative to moodle.base_url")
+        verify_tls = endpoint.get("verify_tls", True)
+        if not isinstance(verify_tls, bool):
+            raise ConfigError("endpoint verify_tls must be a boolean")
+        if project.get("environment") == "production" and not verify_tls:
+            raise ConfigError("production endpoints cannot disable TLS verification")
+        try:
+            expected_status = int(endpoint.get("expected_status", 200))
+            timeout_seconds = float(endpoint.get("timeout_seconds", 15))
+        except (TypeError, ValueError) as exc:
+            raise ConfigError("endpoint expected_status and timeout_seconds must be numeric") from exc
+        if expected_status < 100 or expected_status > 599 or timeout_seconds <= 0:
+            raise ConfigError("endpoint expected_status or timeout_seconds is outside its allowed range")
+
+    logs = data.get("logs", {}) or {}
+    if not isinstance(logs, dict):
+        raise ConfigError("logs must be a mapping")
+    if not isinstance(logs.get("files", []) or [], list):
+        raise ConfigError("logs.files must be a list")
+    sources = logs.get("sources", []) or []
+    if not isinstance(sources, list):
+        raise ConfigError("logs.sources must be a list")
+    log_ids: set[str] = set()
+    for source in sources:
+        if not isinstance(source, dict):
+            raise ConfigError("each logs.sources item must be a mapping")
+        source_id = str(source.get("id") or "")
+        if not source_id or source_id in log_ids:
+            raise ConfigError("log source IDs must be non-empty and unique")
+        log_ids.add(source_id)
+        source_type = str(source.get("type", "file")).lower()
+        if source_type not in {"file", "docker"}:
+            raise ConfigError("log source type must be file or docker")
+        if source_type == "file" and not isinstance(source.get("path"), str):
+            raise ConfigError("file log sources require a path")
+        if source_type == "docker":
+            container = source.get("container")
+            if not isinstance(container, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", container):
+                raise ConfigError("docker log sources require an argv-safe container name")
+            tail_lines = source.get("tail_lines", logs.get("docker_tail_lines", 5000))
+            if isinstance(tail_lines, bool) or not isinstance(tail_lines, int) or not 0 < tail_lines <= 100_000:
+                raise ConfigError("docker log source tail_lines must be between 1 and 100000")
+
+    database = data.get("database", {}) or {}
+    if not isinstance(database, dict):
+        raise ConfigError("database must be a mapping")
+    container_connection_env = database.get("container_connection_env")
+    if container_connection_env is not None:
+        if database.get("connection_env"):
+            raise ConfigError("Use database.connection_env or database.container_connection_env, not both")
+        if not isinstance(container_connection_env, dict):
+            raise ConfigError("database.container_connection_env must be a mapping")
+        container = database.get("runtime_container")
+        if not isinstance(container, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", container):
+            raise ConfigError("database.container_connection_env requires an argv-safe runtime_container")
+        for key in ("database", "user"):
+            name = container_connection_env.get(key)
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+                raise ConfigError(f"database.container_connection_env.{key} must name a container environment variable")
+        password_name = container_connection_env.get("password")
+        if password_name is not None and (not isinstance(password_name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", password_name)):
+            raise ConfigError("database.container_connection_env.password must name a container environment variable")
+        container_host = str(database.get("container_host", "127.0.0.1"))
+        container_port = database.get("container_port", 3306)
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]+", container_host):
+            raise ConfigError("database.container_host is invalid")
+        if isinstance(container_port, bool) or not isinstance(container_port, int) or not 0 < container_port <= 65535:
+            raise ConfigError("database.container_port must be between 1 and 65535")
 
     forbidden_fragments = ("password=", "token=", "secret=")
     serialized = repr(data).lower()

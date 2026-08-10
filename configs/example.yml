@@ -32,6 +32,7 @@ endpoints:
     expected_status: 200
     severity: critical
     timeout_seconds: 15
+    verify_tls: true
   - id: homepage
     method: GET
     path: /
@@ -45,6 +46,13 @@ logs:
   files:
     - /var/log/nginx/error.log
     - /var/log/php/error.log
+  # Docker stdout/stderr sources are bounded and raw text is never persisted.
+  # sources:
+  #   - id: php-container
+  #     type: docker
+  #     container: example-php-1
+  #     tail_lines: 5000
+  #     required: true
   patterns:
     critical:
       - "PHP Fatal error"
@@ -120,6 +128,15 @@ database:
     database: MOODLE_DB_NAME
     user: MOODLE_DB_USER
     password: MOODLE_DB_PASSWORD
+  # Alternative for a DB client running inside a trusted container. Only names
+  # are configured; credential values remain inside the container environment.
+  # Remove connection_env before enabling this alternative.
+  # container_connection_env:
+  #   database: MYSQL_DATABASE
+  #   user: MYSQL_USER
+  #   password: MYSQL_PASSWORD
+  # container_host: 127.0.0.1
+  # container_port: 3306
   max_sample_rows: 20
   timeout_seconds: 30
   checks:

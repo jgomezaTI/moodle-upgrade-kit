@@ -19,6 +19,7 @@ MUTATION_RE = re.compile(
     r"\b(insert|update|delete|replace|alter|drop|create|truncate|grant|revoke|call|set|load|outfile|dumpfile|lock|unlock|rename)\b",
     re.IGNORECASE,
 )
+ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
 def _strip_sql_literals_comments(sql: str) -> str:
@@ -55,9 +56,56 @@ def _env_value(mapping: dict[str, str], key: str, required: bool = True) -> str 
     return value
 
 
+def _container_env_name(mapping: dict[str, str], key: str, required: bool = True) -> str | None:
+    name = mapping.get(key)
+    if not name:
+        if required:
+            raise ValueError(f"database.container_connection_env.{key} is not configured")
+        return None
+    if not ENV_NAME_RE.fullmatch(str(name)):
+        raise ValueError(f"database.container_connection_env.{key} is not an argv-safe environment variable name")
+    return str(name)
+
+
+def _build_container_env_command(db: dict[str, Any], driver: str, container: str) -> tuple[list[str], dict[str, str], str]:
+    mapping = db.get("container_connection_env", {}) or {}
+    database_env = _container_env_name(mapping, "database")
+    user_env = _container_env_name(mapping, "user")
+    password_env = _container_env_name(mapping, "password", required=False) or "MUK_UNSET_DATABASE_PASSWORD"
+    host = str(db.get("container_host", "127.0.0.1"))
+    default_port = 3306 if driver in {"mysql", "mariadb"} else 5432
+    port = str(db.get("container_port", default_port))
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", host) or not port.isdigit() or not 0 < int(port) <= 65535:
+        raise ValueError("database container_host/container_port is invalid")
+
+    resolve_env = (
+        'eval "database_value=\\${$1-}"\n'
+        'eval "user_value=\\${$2-}"\n'
+        'eval "password_value=\\${$3-}"\n'
+        'if [ -z "$database_value" ] || [ -z "$user_value" ]; then '\
+        'echo "Required database container environment is unavailable" >&2; exit 64; fi\n'
+    )
+    if driver in {"mysql", "mariadb"}:
+        script = resolve_env + 'exec env MYSQL_PWD="$password_value" mysql --batch --raw -h "$4" -P "$5" -u "$user_value" "$database_value"'
+    elif driver == "pgsql":
+        script = resolve_env + 'exec env PGPASSWORD="$password_value" psql -A -F "\t" -P footer=off -h "$4" -p "$5" -U "$user_value" -d "$database_value"'
+    else:
+        raise ValueError(f"Unsupported database validation driver: {driver}")
+    command = [
+        "docker", "exec", "-i", container, "sh", "-c", script, "muk-database",
+        database_env, user_env, password_env, host, port,
+    ]
+    return command, os.environ.copy(), f"docker-env:{container}"
+
+
 def _build_command(config: dict[str, Any]) -> tuple[list[str], dict[str, str], str]:
     db = config.get("database", {})
     driver = {"postgres": "pgsql", "postgresql": "pgsql"}.get(str(db.get("driver", "")).lower(), str(db.get("driver", "")).lower())
+    container = db.get("runtime_container")
+    if db.get("container_connection_env") is not None:
+        if not container:
+            raise ValueError("database.runtime_container is required with container_connection_env")
+        return _build_container_env_command(db, driver, str(container))
     mapping = db.get("connection_env", {}) or {}
     host = _env_value(mapping, "host")
     database = _env_value(mapping, "database")
@@ -81,7 +129,6 @@ def _build_command(config: dict[str, Any]) -> tuple[list[str], dict[str, str], s
         secret_env = "PGPASSWORD"
     else:
         raise ValueError(f"Unsupported database validation driver: {driver}")
-    container = db.get("runtime_container")
     if container:
         client = ["docker", "exec", "-i", "-e", secret_env, str(container), *client]
         mode = f"docker:{container}"
@@ -126,13 +173,13 @@ def run_database_checks(config: dict[str, Any], runner: Callable[[list[str], str
     timeout = int(db.get("timeout_seconds", 30))
     runner = runner or _run_process
     if not checks:
-        return {"driver": db.get("driver"), "execution_mode": None, "checks": [], "findings": [], "summary": {"critical": 0, "warning": 0, "executed": 0, "passed": 0}}
+        return {"driver": db.get("driver"), "execution_mode": None, "checks": [], "findings": [], "summary": {"critical": 0, "warning": 0, "configured": 0, "executed": 0, "passed": 0, "complete": False}}
     try:
         command, env, mode = _build_command(config)
     except ValueError as exc:
         severity = "critical" if any(str(c.get("severity", "warning")) == "critical" for c in checks) else "warning"
         findings.append(Finding(severity, "DATABASE_CONNECTION_UNAVAILABLE", str(exc)))
-        return {"driver": db.get("driver"), "execution_mode": None, "checks": [], "findings": [asdict(f) for f in findings], "summary": {"critical": int(severity == "critical"), "warning": int(severity == "warning"), "executed": 0, "passed": 0}}
+        return {"driver": db.get("driver"), "execution_mode": None, "checks": [], "findings": [asdict(f) for f in findings], "summary": {"critical": int(severity == "critical"), "warning": int(severity == "warning"), "configured": len(checks), "executed": 0, "passed": 0, "complete": False}}
 
     for spec in checks:
         check_id = str(spec.get("id") or spec.get("sql_file") or "unnamed")
@@ -180,4 +227,5 @@ def run_database_checks(config: dict[str, Any], runner: Callable[[list[str], str
 
     critical = sum(1 for f in findings if f.severity == "critical")
     warning = sum(1 for f in findings if f.severity == "warning")
-    return {"driver": db.get("driver"), "execution_mode": mode, "checks": results, "findings": [asdict(f) for f in findings], "summary": {"critical": critical, "warning": warning, "executed": sum(1 for item in results if item["executed"]), "passed": sum(1 for item in results if item["executed"] and item["ok"])}}
+    executed = sum(1 for item in results if item["executed"])
+    return {"driver": db.get("driver"), "execution_mode": mode, "checks": results, "findings": [asdict(f) for f in findings], "summary": {"critical": critical, "warning": warning, "configured": len(checks), "executed": executed, "passed": sum(1 for item in results if item["executed"] and item["ok"]), "complete": critical == 0 and executed == len(checks)}}

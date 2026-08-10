@@ -93,6 +93,14 @@ def test_database_policy_rejects_mutation_and_accepts_select():
     assert is_read_only_sql("WITH x AS (SELECT 1) SELECT * FROM x;") is True
 
 
+def test_database_without_checks_is_explicitly_incomplete():
+    result = run_database_checks({"database": {"driver": "mysql", "checks": []}})
+
+    assert result["summary"]["configured"] == 0
+    assert result["summary"]["executed"] == 0
+    assert result["summary"]["complete"] is False
+
+
 def test_database_check_keeps_secret_out_of_evidence(tmp_path, monkeypatch):
     sql_file = tmp_path / "check.sql"
     sql_file.write_text("SELECT id FROM mdl_user WHERE 1=0;\n", encoding="utf-8")
@@ -110,13 +118,47 @@ def test_database_check_keeps_secret_out_of_evidence(tmp_path, monkeypatch):
     assert "supersecret" not in " ".join(seen["command"])
 
 
+def test_database_can_use_named_environment_inside_runtime_container(tmp_path):
+    sql_file = tmp_path / "health.sql"
+    sql_file.write_text("SELECT 1 AS ok;\n", encoding="utf-8")
+    cfg = config_fixture(tmp_path)
+    cfg["database"] = {
+        "driver": "mysql",
+        "runtime_container": "db-1",
+        "container_connection_env": {
+            "database": "MYSQL_DATABASE",
+            "user": "MYSQL_USER",
+            "password": "MYSQL_PASSWORD",
+        },
+        "container_host": "127.0.0.1",
+        "container_port": 3306,
+        "checks": [{"id": "health", "severity": "critical", "sql_file": str(sql_file), "expect": "nonempty"}],
+    }
+    seen = {}
+
+    def runner(command, sql_text, env, timeout):
+        seen.update({"command": command, "sql": sql_text, "env": env, "timeout": timeout})
+        return SimpleNamespace(returncode=0, stdout="ok\n1\n", stderr="")
+
+    result = run_database_checks(cfg, runner=runner)
+
+    assert result["execution_mode"] == "docker-env:db-1"
+    assert result["summary"]["complete"] is True
+    assert result["checks"][0]["sample"] == [{"ok": "1"}]
+    assert seen["command"][:6] == ["docker", "exec", "-i", "db-1", "sh", "-c"]
+    assert seen["command"][-5:] == ["MYSQL_DATABASE", "MYSQL_USER", "MYSQL_PASSWORD", "127.0.0.1", "3306"]
+    assert "supersecret" not in " ".join(seen["command"])
+
+
 def test_baseline_orchestrates_read_only_checks(tmp_path):
     cfg = config_fixture(tmp_path)
+    cfg["database"]["checks"] = [{"id": "health", "sql_file": "health.sql", "expect": "nonempty", "severity": "critical"}]
+    cfg["logs"]["sources"] = [{"id": "php", "type": "docker", "container": "php-1", "required": True}]
     result = capture_baseline(
         cfg, inventory_fixture(tmp_path),
-        endpoint_runner=lambda config: [{"id": "home", "ok": True, "status": 200, "expected_status": 200}],
-        database_runner=lambda config: {"checks": [], "findings": [], "summary": {"critical": 0, "warning": 0}},
-        log_runner=lambda files, patterns: {"files": [], "totals": {}},
+        endpoint_runner=lambda config: [{"id": "home", "executed": True, "ok": True, "status": 200, "expected_status": 200}],
+        database_runner=lambda config: {"checks": [{"id": "health", "executed": True, "ok": True}], "findings": [], "summary": {"critical": 0, "warning": 0, "executed": 1}},
+        log_runner=lambda config: {"files": [{"id": "php", "required": True, "executed": True, "readable": True}], "totals": {}, "summary": {"configured": 1, "executed": 1, "readable": 1}},
     )
     assert result["summary"]["complete"] is True
 

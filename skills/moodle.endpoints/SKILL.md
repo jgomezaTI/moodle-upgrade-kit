@@ -2,7 +2,7 @@
 name: moodle.endpoints
 description: Execute configurable HTTP/API smoke checks with stable IDs, expected status codes and timeouts.
 effect: read-only
-version: 0.1.0
+version: 0.2.0
 ---
 
 # moodle.endpoints
@@ -32,6 +32,9 @@ Execute configurable HTTP/API smoke checks with stable IDs, expected status code
 3. Capture status, latency, redirect target and bounded response metadata.
 4. Never persist authentication tokens or full sensitive response bodies.
 5. Return non-zero/failed state when a critical expectation is not met.
+6. Allow only read-only HTTP methods (`GET`, `HEAD`, `OPTIONS`). Reject mutating methods without sending a request.
+7. Verify TLS by default. A check may explicitly disable verification only outside production, and evidence must record that TLS was not verified.
+8. Record whether each check actually executed; configuration rejection is not an executed check.
 
 ## Blocking conditions
 
@@ -44,4 +47,6 @@ Execute configurable HTTP/API smoke checks with stable IDs, expected status code
 - Preserve the run ID in every generated artifact.
 - Distinguish `critical`, `warning` and `info` findings.
 - Do not claim a check passed if it did not execute.
+- An empty configured endpoint set is not a successful standalone endpoint run.
+- Never allow a production endpoint check to disable TLS verification.
 - Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.

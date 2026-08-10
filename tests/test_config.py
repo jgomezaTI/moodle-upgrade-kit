@@ -86,3 +86,65 @@ def test_legacy_and_structured_core_references_cannot_be_combined():
 
     with pytest.raises(ConfigError, match="not both"):
         validate_config(cfg)
+
+
+def test_base_url_cannot_contain_credentials():
+    cfg = base_config()
+    cfg["moodle"]["base_url"] = "https://user:password@example.invalid"
+
+    with pytest.raises(ConfigError, match="must not contain credentials"):
+        validate_config(cfg)
+
+
+def test_endpoint_methods_are_restricted_to_read_only_requests():
+    cfg = base_config()
+    cfg["endpoints"] = [{"id": "unsafe", "path": "/users", "method": "POST"}]
+
+    with pytest.raises(ConfigError, match="read-only"):
+        validate_config(cfg)
+
+
+def test_production_endpoint_cannot_disable_tls_verification():
+    cfg = base_config()
+    cfg["project"]["environment"] = "production"
+    cfg["endpoints"] = [{"id": "home", "path": "/", "verify_tls": False}]
+
+    with pytest.raises(ConfigError, match="cannot disable TLS"):
+        validate_config(cfg)
+
+
+def test_docker_log_source_requires_safe_container_name():
+    cfg = base_config()
+    cfg["logs"] = {"sources": [{"id": "php", "type": "docker", "container": "php;unsafe"}]}
+
+    with pytest.raises(ConfigError, match="argv-safe"):
+        validate_config(cfg)
+
+
+def test_database_container_environment_names_are_valid():
+    cfg = base_config()
+    cfg["database"] = {
+        "driver": "mysql",
+        "runtime_container": "moodle-db-1",
+        "container_connection_env": {
+            "database": "MYSQL_DATABASE",
+            "user": "MYSQL_USER",
+            "password": "MYSQL_PASSWORD",
+        },
+        "container_host": "127.0.0.1",
+        "container_port": 3306,
+    }
+
+    validate_config(cfg)
+
+
+def test_database_container_environment_rejects_unsafe_name():
+    cfg = base_config()
+    cfg["database"] = {
+        "driver": "mysql",
+        "runtime_container": "moodle-db-1",
+        "container_connection_env": {"database": "MYSQL_DATABASE;env", "user": "MYSQL_USER"},
+    }
+
+    with pytest.raises(ConfigError, match="must name"):
+        validate_config(cfg)

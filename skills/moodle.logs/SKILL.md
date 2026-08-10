@@ -2,7 +2,7 @@
 name: moodle.logs
 description: Analyze configured Nginx/Apache, PHP, Moodle and cron log sources for new or material errors.
 effect: read-only
-version: 0.1.0
+version: 0.2.0
 ---
 
 # moodle.logs
@@ -32,6 +32,8 @@ Analyze configured Nginx/Apache, PHP, Moodle and cron log sources for new or mat
 3. Prefer comparing a bounded post-upgrade window to the baseline rather than scanning unlimited history.
 4. Redact secrets and avoid copying large raw logs into reports.
 5. Group repeated signatures to avoid inflating one root cause into many incidents.
+6. Support bounded configured local files and Docker log sources using argv-safe `docker logs --tail` execution.
+7. Persist counts and source execution/readability metadata only; never persist raw Docker/file log text.
 
 ## Blocking conditions
 
@@ -44,4 +46,6 @@ Analyze configured Nginx/Apache, PHP, Moodle and cron log sources for new or mat
 - Preserve the run ID in every generated artifact.
 - Distinguish `critical`, `warning` and `info` findings.
 - Do not claim a check passed if it did not execute.
+- An empty log-source set is incomplete, and an unreadable required source blocks completion.
+- Reject unsafe container names and unbounded Docker tail requests before execution.
 - Prefer deterministic repository scripts over improvised shell commands when an equivalent helper exists.
