@@ -2,7 +2,7 @@
 name: moodle.document
 description: Generate a redacted local evidence report and expose external documentation synchronization status without losing technical evidence.
 effect: read/write artifacts
-version: 0.2.0
+version: 0.3.0
 ---
 
 # moodle.document
@@ -21,6 +21,7 @@ Summarize structured run evidence into a local technical report. External synchr
 
 - `runs/<run-id>/final-report.md`
 - `runs/<run-id>/document-result.json`
+- `runs/<run-id>/document-sync.json` after authenticated external synchronization
 - External synchronization status when a provider is configured
 
 ## Procedure
@@ -32,6 +33,7 @@ Summarize structured run evidence into a local technical report. External synchr
 5. Always preserve the local Markdown report.
 6. When an external provider such as Google Drive is configured but no authenticated adapter is available, record `external-adapter-required` rather than pretending synchronization completed.
 7. A synchronization failure/pending adapter may warn, but must not destroy local technical evidence.
+8. When synchronization is required, delegate `moodle.document.sync` to an authenticated adapter, verify the target through a read-after-write, and record only provider/resource metadata through `muk record-document-sync`.
 
 ## Blocking conditions
 

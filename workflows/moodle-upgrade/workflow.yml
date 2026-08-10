@@ -85,6 +85,12 @@ workflow:
       input:
         args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }} --mode upgrade"
 
+    - id: functional-qa
+      type: command
+      command: speckit.moodle.qa
+      input:
+        args: "--config {{ inputs.config }} --run-id {{ inputs.run_id }}"
+
     - id: acceptance
       type: gate
       message: "Review post-upgrade validation. Approve acceptance, or reject and evaluate rollback."

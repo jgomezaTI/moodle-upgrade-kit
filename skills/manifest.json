@@ -10,11 +10,12 @@
     "moodle.backup",
     "moodle.upgrade",
     "moodle.validate",
+    "moodle.qa",
     "moodle.rollback",
     "moodle.document"
   ],
-  "count": 12,
-  "version": "0.1.0",
+  "count": 13,
+  "version": "0.3.0",
   "destructive": [
     "moodle.upgrade",
     "moodle.rollback"

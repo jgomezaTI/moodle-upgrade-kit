@@ -18,8 +18,10 @@ inventory before
 → upgrade
 → inventory/endpoints/logs/database after
 → validate
+→ functional QA
 → human acceptance gate
 → document
+→ optional verified external documentation sync
 ```
 
 Rollback is implemented as a separate explicit gated flow.
@@ -258,12 +260,13 @@ upgrade-orchestrator
 discovery-agent
 compatibility-agent
 baseline-agent
+qa-agent
 upgrade-agent
 rollback-agent
 documentation-agent
 ```
 
-The machine-validated registry gives every deterministic capability exactly one owner. The orchestrator is delegate-only; upgrade and rollback have exclusive separate owners. Decisions contain at most one `executes_automatically: false` action and reuse the same upgrade/rollback precondition evaluators as execution.
+The machine-validated registry gives every registered capability exactly one owner. The orchestrator is delegate-only; upgrade and rollback have exclusive separate owners. Decisions contain at most one `executes_automatically: false` action and reuse the same upgrade/rollback precondition evaluators as execution.
 
 The real agent decision is blocked by `MUTATION_DISABLED`, `GIT_NOT_CLEAN`, `COMPATIBILITY_NOT_PASSED`, `BACKUP_NOT_VERIFIED` and missing configured upgrade steps. This is expected and no destructive command executed.
 
@@ -272,6 +275,10 @@ Framework `0.2.0` canonical validation passed with 77 tests, editable installati
 Framework `0.2.1` adds `muk review-code` / `speckit.moodle.review-code`: a single read-only command that refreshes inventory, scans YAML-configured custom-code paths through the existing `moodle.plugins` capability and produces a bounded `code-review.json` work queue for `compatibility-agent`. It never edits inspected code.
 
 Canonical validation passes with 80 tests. Real read-only execution under `ENAEX-CONFIGURED-CODE-REVIEW-V1` covered all 10 configured targets: 5 direct scans and 5 paths deduplicated under their configured parent, with no uncovered target. It queued 90 warning groups and 105 explicit manual-review items; no source content or obvious credential fields were persisted. `safety.allow_mutation` remained false.
+
+Framework `0.3.0` adds `muk run-agents`, `qa-agent`, validated QA/document-sync evidence and the installable Codex `/upgrade-moodle` entry point. The runner advances all permitted deterministic actions and stops at a blocker, human gate or external adapter; it never supplies approval. Canonical validation passes with 98 tests.
+
+Running it against the existing real V2 evidence remains safely blocked by `MUTATION_DISABLED`, `GIT_NOT_CLEAN`, `COMPATIBILITY_NOT_PASSED`, `BACKUP_NOT_VERIFIED` and the five missing environment-owned upgrade commands. No upgrade or rollback command executed.
 
 ## Safety invariants
 

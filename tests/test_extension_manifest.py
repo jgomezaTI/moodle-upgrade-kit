@@ -11,7 +11,7 @@ def test_extension_manifest_shape_and_commands():
     assert data["extension"]["id"] == "moodle"
     assert data["requires"]["speckit_version"]
     commands = data["provides"]["commands"]
-    assert len(commands) == 14
+    assert len(commands) == 16
     for command in commands:
         assert re.fullmatch(r"speckit\.moodle\.[a-z0-9-]+", command["name"])
         file_path = ROOT / command["file"]
@@ -21,6 +21,6 @@ def test_extension_manifest_shape_and_commands():
 
 def test_all_skill_contracts_exist():
     manifest = __import__('json').loads((ROOT / 'skills/manifest.json').read_text())
-    assert manifest['count'] == 12
+    assert manifest['count'] == 13
     for name in manifest['skills']:
         assert (ROOT / 'skills' / name / 'SKILL.md').exists()

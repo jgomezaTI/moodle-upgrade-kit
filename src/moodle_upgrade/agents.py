@@ -25,6 +25,8 @@ KNOWN_CAPABILITIES = {
     "moodle.validate",
     "moodle.rollback",
     "moodle.document",
+    "moodle.qa",
+    "moodle.document.sync",
 }
 
 
@@ -197,7 +199,8 @@ def orchestrate_agents(
     evidence_names = [
         "inventory-before.json", "compatibility.json", "plugins.json", "baseline-before.json", "backup.json",
         "upgrade-result.json", "rollback-result.json", "inventory-after.json", "endpoints-after.json",
-        "logs-after.json", "database-after.json", "validation.json", "document-result.json",
+        "logs-after.json", "database-after.json", "validation.json", "qa-result.json",
+        "document-result.json", "document-sync.json",
     ]
     evidence = {name: (run_dir / name).is_file() for name in evidence_names}
     approvals = {
@@ -299,6 +302,12 @@ def orchestrate_agents(
         return result("action_required", action=action("moodle.validate", "validation.json", mode=expected_mode))
     if not validation.get("summary", {}).get("accepted", False):
         return result("blocked", blockers=validation.get("findings") or [_finding("VALIDATION_NOT_ACCEPTED", "Post-change validation was not accepted.")])
+    if workflow == "upgrade":
+        qa = load("qa-result.json")
+        if qa is None or not newer("qa-result.json", "validation.json"):
+            return result("action_required", action=action("moodle.qa", "qa-result.json", mode="upgrade"))
+        if not qa.get("summary", {}).get("complete", False) or not qa.get("summary", {}).get("accepted", False):
+            return result("blocked", blockers=qa.get("findings") or [_finding("QA_NOT_ACCEPTED", "Functional QA evidence is incomplete or not accepted.")])
     if workflow == "upgrade" and config.get("safety", {}).get("require_human_gate", True) and not acceptance_approved:
         return result("human_gate", gate="acceptance")
     if not newer("document-result.json", "validation.json"):
@@ -306,4 +315,11 @@ def orchestrate_agents(
     document = load("document-result.json")
     if not document or not document.get("summary", {}).get("report_generated", False):
         return result("blocked", blockers=[_finding("DOCUMENTATION_NOT_COMPLETED", "Documentation evidence does not report a generated report.")])
+    documentation = config.get("documentation", {}) or {}
+    if documentation.get("provider") and documentation.get("require_sync", False):
+        sync = load("document-sync.json")
+        if sync is None or not newer("document-sync.json", "document-result.json"):
+            return result("action_required", action=action("moodle.document.sync", "document-sync.json"))
+        if not sync.get("summary", {}).get("complete", False):
+            return result("blocked", blockers=sync.get("findings") or [_finding("DOCUMENT_SYNC_NOT_COMPLETED", "External documentation synchronization did not complete.")])
     return result("complete")

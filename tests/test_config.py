@@ -148,3 +148,29 @@ def test_database_container_environment_rejects_unsafe_name():
 
     with pytest.raises(ConfigError, match="must name"):
         validate_config(cfg)
+
+
+def test_qa_case_ids_are_unique_and_effects_are_explicit():
+    cfg = base_config()
+    cfg["qa"] = {"cases": [
+        {"id": "login", "area": "auth", "description": "Log in.", "requires_effects": False},
+        {"id": "login", "area": "auth", "description": "Log in again.", "requires_effects": False},
+    ]}
+    with pytest.raises(ConfigError, match="unique"):
+        validate_config(cfg)
+
+    cfg["qa"]["cases"] = [{"id": "login", "area": "auth", "description": "Log in.", "requires_effects": "no"}]
+    with pytest.raises(ConfigError, match="boolean"):
+        validate_config(cfg)
+
+    cfg["qa"]["cases"] = [{"id": "login", "area": "auth", "description": "Log in.", "required": "yes"}]
+    with pytest.raises(ConfigError, match="required must be a boolean"):
+        validate_config(cfg)
+
+
+def test_required_document_sync_needs_a_provider():
+    cfg = base_config()
+    cfg["documentation"] = {"require_sync": True}
+
+    with pytest.raises(ConfigError, match="provider"):
+        validate_config(cfg)

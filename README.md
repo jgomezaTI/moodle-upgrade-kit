@@ -26,8 +26,10 @@ The project separates **capability contracts** from **deterministic execution**:
 | `moodle.backup` | Verify explicit backup components and freshness | Read-only |
 | `moodle.upgrade` | Execute an exact configured upgrade after all gates pass | Destructive; gated |
 | `moodle.validate` | Compare post-change evidence against baseline | Read-only |
+| `moodle.qa` | Record controlled functional QA after deterministic validation | Controlled validation |
 | `moodle.rollback` | Execute an explicit restore procedure after rollback gates pass | Destructive; gated |
 | `moodle.document` | Produce a redacted local evidence report | Artifact write |
+| `moodle.document.sync` | Verify an environment adapter published the report externally | External adapter |
 
 ## Critical path
 
@@ -41,8 +43,10 @@ inventory before
 → upgrade
 → inventory/endpoints/logs/database after
 → validate
+→ functional QA
 → human acceptance gate
 → document
+→ optional verified external documentation sync
 ```
 
 Rollback is separately gated and requires an explicit restore procedure:
@@ -66,7 +70,7 @@ rollback review gate
 7. Mutation commands use argv-safe execution; shell interpolation/control syntax and credential-bearing arguments are rejected.
 8. Command exit code zero is not acceptance. Post-change `moodle.validate` must pass.
 9. Every real regression should become a stable test or validation check.
-10. Agent decisions never execute automatically; capability ownership and destructive-role separation are machine-validated.
+10. The autonomous runner executes only selected deterministic capabilities; it stops at human gates, external adapters and machine blockers.
 
 ## Installation
 
@@ -140,6 +144,7 @@ runs/<run-id>/
 ├── database-before.json
 ├── backup.json
 ├── agent-state.json
+├── agent-run.json
 ├── upgrade-plan.md
 ├── upgrade-result.json
 ├── inventory-after.json
@@ -147,15 +152,17 @@ runs/<run-id>/
 ├── logs-after.json
 ├── database-after.json
 ├── validation.json
+├── qa-result.json
 ├── rollback-plan.md
 ├── rollback-result.json
 ├── final-report.md
-└── document-result.json
+├── document-result.json
+└── document-sync.json
 ```
 
 ## Agent orchestration
 
-The seven agent contracts are registered under `agents/`. They are model/vendor neutral: an AI integration reads the role prompt, while `muk orchestrate` deterministically selects at most one permitted next capability from current evidence.
+Eight agent contracts are registered under `agents/`. They are model/vendor neutral: an AI integration reads the role prompt, while `muk orchestrate` deterministically selects at most one permitted next capability from current evidence.
 
 ```bash
 muk orchestrate \
@@ -165,9 +172,28 @@ muk orchestrate \
   --agents-dir agents
 ```
 
-The result is written to `agent-state.json` with one of four statuses: `action_required`, `human_gate`, `blocked`, or `complete`. It always sets `executes_automatically: false` for delegated actions.
+The decision is written to `agent-state.json`. To execute every currently permitted deterministic step in sequence, use:
+
+```bash
+muk run-agents \
+  --config "$CONFIG" \
+  --run-id "$RUN_ID" \
+  --agents-dir agents
+```
+
+The runner writes `agent-run.json` and stops at `human_gate`, `blocked`, `external_action_required`, `complete`, or a deterministic failure. It never invents approvals, commands, backup conventions or credentials.
 
 Only `upgrade-agent` owns `moodle.upgrade`; only `rollback-agent` owns `moodle.rollback`; the orchestrator owns no capability. Approval inputs cannot override machine blockers, enable mutation or invent environment commands. See `docs/AGENT_ARCHITECTURE.md`.
+
+### Codex chat entry point
+
+The repository packages a local Codex plugin under `plugins/moodle-upgrade-kit`. Once installed from the bundled `personal` marketplace, start a new chat and invoke:
+
+```text
+/upgrade-moodle
+```
+
+Optional invocation text may supply a config path, run ID, workflow or approval for the current named gate. The skill runs/resumes the deterministic agent workflow, inspects the code-review queue, coordinates functional QA, and verifies configured Google Drive documentation. It pauses when a required human decision or unresolved machine/external condition remains.
 
 ### Start configured-code review
 

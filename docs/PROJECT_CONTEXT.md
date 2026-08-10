@@ -32,7 +32,7 @@ The framework should remain generic first. Enaex-specific checks and adapters ca
 7. **Real regressions become permanent checks.** Bugs found during upgrade projects should be converted into deterministic tests/checks when practical.
 8. **Do not assume all relevant code is a Moodle plugin.** Legacy applications, portals, integrations, batch jobs, and scripts coupled to Moodle are also part of upgrade compatibility.
 
-## 3. Planned capabilities
+## 3. Capabilities
 
 The initial capability set is:
 
@@ -48,6 +48,9 @@ The initial capability set is:
 10. `moodle.validate`
 11. `moodle.rollback`
 12. `moodle.document`
+13. `moodle.qa`
+
+The agent registry also exposes `moodle.document.sync` as an optional external adapter capability. Its connector work is performed by the active chat integration and its result is machine-validated before completion.
 
 The intended high-level upgrade flow is:
 
@@ -61,8 +64,10 @@ inventory
 → upgrade
 → post-upgrade endpoints/logs/database
 → validate
+→ functional QA
 → acceptance human gate
 → document
+→ optional verified external documentation sync
 ```
 
 Rollback flow:
@@ -80,10 +85,13 @@ Current structure includes:
 
 ```text
 moodle-upgrade-kit/
+├── .agents/plugins/
+├── agents/
 ├── commands/
 ├── configs/
 ├── docs/
 ├── skills/
+├── plugins/moodle-upgrade-kit/
 ├── sql/checks/
 ├── src/moodle_upgrade/
 ├── tests/
@@ -94,6 +102,8 @@ moodle-upgrade-kit/
 Responsibilities:
 
 - `skills/`: capability contracts and behavioral rules.
+- `agents/`: portable role, capability-ownership and delegation contracts.
+- `plugins/moodle-upgrade-kit/`: installable Codex chat entry point for `/upgrade-moodle`.
 - `commands/`: Spec Kit-compatible command descriptions.
 - `src/moodle_upgrade/`: deterministic Python implementation.
 - `workflows/`: orchestration and human gates.
@@ -434,7 +444,7 @@ On Ubuntu/WSL, the matching `python3.x-venv` package may need to be installed be
 
 ## 14. Next development priority
 
-The deterministic framework and Spec Kit-style agent layer are implemented. The immediate priority for the real Enaex target is **not** to run an upgrade; it is to resolve the recorded environment-owned blockers:
+The deterministic framework, Spec Kit-style agent layer and autonomous guarded runner are implemented. The immediate priority for the real Enaex target is **not** to run an upgrade; it is to resolve the recorded environment-owned blockers:
 
 ```text
 1. Upgrade PHP/runtime compatibility for both the current and target Moodle requirements.

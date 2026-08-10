@@ -8,6 +8,8 @@ agents:
     contract: compatibility-agent/AGENT.md
   - id: baseline-agent
     contract: baseline-agent/AGENT.md
+  - id: qa-agent
+    contract: qa-agent/AGENT.md
   - id: upgrade-agent
     contract: upgrade-agent/AGENT.md
   - id: rollback-agent

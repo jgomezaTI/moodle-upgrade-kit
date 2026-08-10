@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-08-09
+
+- Added the installable Codex plugin and `/upgrade-moodle` chat entry point.
+- Added `muk run-agents`, which advances every permitted deterministic agent action until completion or a required stop condition.
+- Added `qa-agent`, configurable functional QA, anonymized `qa-result.json` validation and the pre-acceptance QA gate.
+- Added optional verified external documentation synchronization with `document-sync.json`.
+- Added autonomous-run evidence and regression coverage for blockers, gates, resume behavior, QA and documentation synchronization.
+- Prevented required QA cases from being marked not applicable to create a false acceptance.
+
 ## 0.2.1 - 2026-08-09
 
 - Added `muk review-code` and `speckit.moodle.review-code` as a read-only one-command entry point for YAML-configured custom-code review.

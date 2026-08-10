@@ -14,5 +14,6 @@ The canonical names are:
 - `moodle.backup`
 - `moodle.upgrade`
 - `moodle.validate`
+- `moodle.qa`
 - `moodle.rollback`
 - `moodle.document`

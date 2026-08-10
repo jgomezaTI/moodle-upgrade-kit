@@ -149,6 +149,24 @@ database:
       expect: empty
       sql_file: sql/checks/failed_scheduled_tasks.sql
 
+qa:
+  cases:
+    - id: qa-login
+      area: authentication
+      severity: critical
+      description: Sign in with a controlled account and reach the dashboard.
+      requires_effects: false
+    - id: qa-course-navigation
+      area: courses
+      severity: critical
+      description: Open a controlled course and navigate its main activities.
+      requires_effects: false
+    - id: qa-gradebook
+      area: gradebook
+      severity: critical
+      description: Compare a controlled gradebook view with its expected result.
+      requires_effects: false
+
 upgrade:
   # Mandatory before an executable upgrade. Use an argv list or a dedicated
   # reviewed script; never place shell operators or credentials here.

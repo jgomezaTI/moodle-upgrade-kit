@@ -10,11 +10,11 @@ run evidence
 upgrade-orchestrator (delegate-only)
     ↓ one authorized next_action
 capability owner agent
-    ↓ invokes existing `muk` capability only after user action
+    ↓ autonomous runner invokes an existing deterministic `muk` capability
 new structured evidence
 ```
 
-The selector never launches another process and every action contains `executes_automatically: false`.
+The selector remains a pure decision function and every action contains `executes_automatically: false`. `muk run-agents` is the separate executor: it advances permitted deterministic actions and stops before external adapters, blockers or human gates.
 
 ## Decision statuses
 
@@ -23,11 +23,12 @@ The selector never launches another process and every action contains `executes_
 | `action_required` | One authorized agent/capability should produce the declared evidence artifact. |
 | `human_gate` | Machine prerequisites pass to this point; explicit approval is still required. |
 | `blocked` | At least one deterministic machine gate fails; no capability is delegated. |
-| `complete` | Validation, acceptance where required, and documentation are complete. |
+| `external_action_required` | QA or documentation synchronization must be performed by the active chat integration and recorded through its validator. |
+| `complete` | Validation, functional QA, acceptance, documentation and any required external sync are complete. |
 
 ## Permission model
 
-All 12 deterministic capabilities have exactly one owner. The orchestrator has none. `upgrade-agent` and `rollback-agent` are mutually exclusive destructive roles; registry loading fails if those ownership rules change.
+All registered capabilities have exactly one owner. The orchestrator has none. `upgrade-agent` and `rollback-agent` are mutually exclusive destructive roles; registry loading fails if those ownership rules change.
 
 This policy supplements Spec Kit workflows, which orchestrate commands and gates but do not themselves provide an operating-system capability sandbox. The actual upgrade and rollback implementations still re-evaluate every machine prerequisite and explicit approval before running configured argv-safe commands.
 
@@ -39,7 +40,8 @@ Upgrade selection follows:
 inventory before → compatibility → plugins → baseline → backup
 → machine gates → human gate → upgrade
 → inventory/endpoints/logs/database after → validate
-→ acceptance gate → document
+→ functional QA → acceptance gate → document
+→ optional verified external documentation sync
 ```
 
 Rollback selection follows its separate backup/decision/human gates, explicit rollback result, post-rollback evidence, rollback-mode validation and documentation.
@@ -56,6 +58,18 @@ muk orchestrate \
   --agents-dir agents
 ```
 
+To advance all permitted steps instead of selecting only one:
+
+```bash
+muk run-agents \
+  --config configs/environments/example.local.yml \
+  --run-id UPG-2026-001 \
+  --workflow upgrade \
+  --agents-dir agents
+```
+
+The run summary is stored in `agent-run.json`. QA and Google Drive remain environment-adapter actions because their browser/connector effects and evidence require the active chat integration; `muk record-qa` and `muk record-document-sync` validate their anonymized results before the workflow advances.
+
 Approval flags only tell the selector that a named human gate was satisfied. They do not enable mutation and are not forwarded automatically. The selected destructive capability still requires its own explicit CLI approval and all deterministic evidence.
 
 ## Configured-code review entry point
@@ -63,3 +77,7 @@ Approval flags only tell the selector that a named human gate was satisfied. The
 `muk review-code --config <yaml> --run-id <id>` is the direct read-only entry point for AI-assisted module review. It refreshes inventory by default, invokes the existing `moodle.plugins` analyzer and derives `code-review.json`; it does not contain a second scanner.
 
 The queue preserves deterministic severity and `review_rank`, includes only file/line metadata and records whether every YAML-configured target was scanned directly or through a deduplicated parent. `speckit.moodle.review-code` instructs `compatibility-agent` to inspect that queue and propose the smallest correction, while file editing remains separately authorized.
+
+## Codex plugin
+
+`plugins/moodle-upgrade-kit` packages the `upgrade-moodle` skill and `/upgrade-moodle` command. The skill resolves the configured environment, calls `muk run-agents`, handles compatibility review and external QA/documentation adapters, and resumes until completion or a mandatory stop condition. It cannot weaken any deterministic gate.

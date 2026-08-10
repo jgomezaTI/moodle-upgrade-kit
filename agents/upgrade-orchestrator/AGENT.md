@@ -19,6 +19,8 @@ forbidden_capabilities:
   - moodle.validate
   - moodle.rollback
   - moodle.document
+  - moodle.qa
+  - moodle.document.sync
 consumes:
   - runs/<run-id>/*.json
   - environment config
@@ -28,6 +30,7 @@ delegates_to:
   - discovery-agent
   - compatibility-agent
   - baseline-agent
+  - qa-agent
   - upgrade-agent
   - rollback-agent
   - documentation-agent

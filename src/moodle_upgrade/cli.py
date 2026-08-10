@@ -8,6 +8,7 @@ import sys
 
 from .backup import verify_backups
 from .agents import orchestrate_agents
+from .autonomy import run_agent_workflow
 from .baseline import capture_baseline
 from .compare import compare_endpoint_sets
 from .compatibility import assess_compatibility
@@ -19,6 +20,7 @@ from .evidence import read_json, run_dir, write_json
 from .inventory import collect_inventory
 from .logs import analyze_log_sources
 from .plugins import analyze_plugins
+from .qa import record_document_sync, record_qa_result
 from .review import build_code_review_queue
 from .rollback import execute_rollback, render_rollback_plan
 from .upgrade import execute_upgrade, render_upgrade_plan
@@ -40,6 +42,11 @@ def _evidence_path(rd: Path, *names: str) -> Path:
 def _read_optional(rd: Path, name: str):
     path = rd / name
     return read_json(path) if path.is_file() else None
+
+
+def _read_input_json(path: str | Path):
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    return raw.get("data", raw) if isinstance(raw, dict) else raw
 
 
 def cmd_validate_config(args):
@@ -253,6 +260,47 @@ def cmd_orchestrate(args):
     return 3 if result.get("status") == "blocked" else 0
 
 
+def cmd_run_agents(args):
+    cfg = load_config(args.config)
+    rd = run_dir(args.run_id)
+    result = run_agent_workflow(
+        cfg,
+        args.run_id,
+        rd,
+        workflow=args.workflow,
+        agents_dir=args.agents_dir,
+        pre_upgrade_approved=args.pre_upgrade_approved,
+        acceptance_approved=args.acceptance_approved,
+        rollback_approved=args.rollback_approved,
+        force_rollback=args.force_rollback,
+        max_steps=args.max_steps,
+    )
+    _json_print(result)
+    if result["status"] == "complete":
+        return 0
+    if result["status"] in {"human_gate", "external_action_required"}:
+        return 4
+    return 3 if result["status"] == "blocked" else 1
+
+
+def cmd_record_qa(args):
+    cfg = load_config(args.config)
+    rd = run_dir(args.run_id)
+    result = record_qa_result(cfg, _read_input_json(args.input))
+    write_json(rd / "qa-result.json", result)
+    _json_print(result)
+    return 0 if result["summary"]["accepted"] else 3
+
+
+def cmd_record_document_sync(args):
+    cfg = load_config(args.config)
+    rd = run_dir(args.run_id)
+    result = record_document_sync(cfg, _read_input_json(args.input))
+    write_json(rd / "document-sync.json", result)
+    _json_print(result)
+    return 0 if result["summary"]["complete"] else 3
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="muk")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -326,6 +374,30 @@ def build_parser():
     command.add_argument("--rollback-approved", action="store_true")
     command.add_argument("--force-rollback", action="store_true")
     command.set_defaults(func=cmd_orchestrate)
+
+    command = sub.add_parser("run-agents")
+    command.add_argument("--config", required=True)
+    command.add_argument("--run-id", required=True)
+    command.add_argument("--workflow", choices=["upgrade", "rollback"], default="upgrade")
+    command.add_argument("--agents-dir", default="agents")
+    command.add_argument("--pre-upgrade-approved", action="store_true")
+    command.add_argument("--acceptance-approved", action="store_true")
+    command.add_argument("--rollback-approved", action="store_true")
+    command.add_argument("--force-rollback", action="store_true")
+    command.add_argument("--max-steps", type=int, default=32)
+    command.set_defaults(func=cmd_run_agents)
+
+    command = sub.add_parser("record-qa")
+    command.add_argument("--config", required=True)
+    command.add_argument("--run-id", required=True)
+    command.add_argument("--input", required=True)
+    command.set_defaults(func=cmd_record_qa)
+
+    command = sub.add_parser("record-document-sync")
+    command.add_argument("--config", required=True)
+    command.add_argument("--run-id", required=True)
+    command.add_argument("--input", required=True)
+    command.set_defaults(func=cmd_record_document_sync)
     return parser
 
 

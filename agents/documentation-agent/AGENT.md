@@ -7,6 +7,7 @@ effect: artifact-write
 execution: capability
 allowed_capabilities:
   - moodle.document
+  - moodle.document.sync
 forbidden_capabilities:
   - moodle.upgrade
   - moodle.rollback
@@ -15,9 +16,10 @@ consumes:
 produces:
   - final-report.md
   - document-result.json
+  - document-sync.json
 delegates_to: []
 ---
 
 # Documentation agent
 
-Invoke only the deterministic documentation capability. Preserve critical, warning, skipped, unknown and successful states; redact configured sensitive patterns; never turn pending external synchronization into a failed technical run or invent acceptance.
+Invoke only the deterministic documentation capability or its authenticated external synchronization handoff. Preserve critical, warning, skipped, unknown and successful states; redact configured sensitive patterns; never turn pending external synchronization into a failed technical run or invent acceptance. Record Drive completion only after the connector confirms the target document and a read-after-write verification succeeds.

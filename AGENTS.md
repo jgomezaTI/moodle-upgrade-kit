@@ -42,8 +42,10 @@ inventory before
 → upgrade
 → inventory/endpoints/logs/database after
 → validate
+→ functional QA
 → human acceptance gate
 → document
+→ optional verified documentation sync
 ```
 
 Rollback is separately gated:
@@ -119,11 +121,14 @@ runs/<run-id>/
 ├── inventory-before.json
 ├── compatibility.json
 ├── plugins.json
+├── code-review.json
 ├── baseline-before.json
 ├── endpoints-before.json
 ├── logs-before.json
 ├── database-before.json
 ├── backup.json
+├── agent-state.json
+├── agent-run.json
 ├── upgrade-plan.md
 ├── upgrade-result.json
 ├── inventory-after.json
@@ -131,10 +136,12 @@ runs/<run-id>/
 ├── logs-after.json
 ├── database-after.json
 ├── validation.json
+├── qa-result.json
 ├── rollback-plan.md
 ├── rollback-result.json
 ├── final-report.md
-└── document-result.json
+├── document-result.json
+└── document-sync.json
 ```
 
 Generated run evidence remains ignored by Git.
@@ -157,6 +164,7 @@ ENAEX-311-TO-410-CRITICAL-PATH-V2
 - Preserve stable check/finding IDs for auditability.
 - Keep agent contracts, capability ownership, deterministic orchestration and execution gates synchronized.
 - Use `muk review-code` / `speckit.moodle.review-code` as the one-command read-only entry point for reviewing YAML-configured custom-code paths; it must reuse `moodle.plugins` rather than introduce a second scanner.
+- Use `muk run-agents` as the deterministic multi-step executor. It must stop at human gates, external adapter work and blockers, and must never infer approval.
 
 ## Canonical checks
 

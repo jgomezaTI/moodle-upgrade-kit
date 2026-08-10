@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Upgrade Orchestrator"
+  short_description: "Run the guarded Moodle upgrade lifecycle"
+  default_prompt: "Use $upgrade-moodle to run the configured Moodle upgrade workflow end to end."

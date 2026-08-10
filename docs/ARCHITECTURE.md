@@ -27,6 +27,7 @@ runs/<run-id>/
 ├── database-before.json
 ├── backup.json
 ├── agent-state.json
+├── agent-run.json
 ├── upgrade-plan.md
 ├── upgrade-result.json
 ├── endpoints-after.json
@@ -34,7 +35,10 @@ runs/<run-id>/
 ├── database-after.json
 ├── baseline-after.json
 ├── validation.json
-└── final-report.md
+├── qa-result.json
+├── final-report.md
+├── document-result.json
+└── document-sync.json
 ```
 
 Not every file must exist before execution starts. Missing expected evidence is itself reportable.

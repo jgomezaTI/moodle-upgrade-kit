@@ -177,6 +177,39 @@ def validate_config(data: dict[str, Any]) -> None:
         if isinstance(container_port, bool) or not isinstance(container_port, int) or not 0 < container_port <= 65535:
             raise ConfigError("database.container_port must be between 1 and 65535")
 
+    qa = data.get("qa", {}) or {}
+    if not isinstance(qa, dict):
+        raise ConfigError("qa must be a mapping")
+    qa_cases = qa.get("cases", []) or []
+    if not isinstance(qa_cases, list):
+        raise ConfigError("qa.cases must be a list")
+    qa_ids: set[str] = set()
+    for case in qa_cases:
+        if not isinstance(case, dict):
+            raise ConfigError("each qa.cases item must be a mapping")
+        case_id = case.get("id")
+        if not isinstance(case_id, str) or not case_id or case_id in qa_ids:
+            raise ConfigError("QA case IDs must be non-empty and unique")
+        qa_ids.add(case_id)
+        if not isinstance(case.get("area"), str) or not case.get("area"):
+            raise ConfigError(f"qa.cases.{case_id}.area is required")
+        if case.get("severity", "warning") not in {"critical", "warning", "info"}:
+            raise ConfigError(f"qa.cases.{case_id}.severity is invalid")
+        if not isinstance(case.get("description"), str) or not case.get("description"):
+            raise ConfigError(f"qa.cases.{case_id}.description is required")
+        if not isinstance(case.get("requires_effects", False), bool):
+            raise ConfigError(f"qa.cases.{case_id}.requires_effects must be a boolean")
+        if not isinstance(case.get("required", True), bool):
+            raise ConfigError(f"qa.cases.{case_id}.required must be a boolean")
+
+    documentation = data.get("documentation", {}) or {}
+    if not isinstance(documentation, dict):
+        raise ConfigError("documentation must be a mapping")
+    if not isinstance(documentation.get("require_sync", False), bool):
+        raise ConfigError("documentation.require_sync must be a boolean")
+    if documentation.get("require_sync", False) and not documentation.get("provider"):
+        raise ConfigError("documentation.provider is required when synchronization is required")
+
     forbidden_fragments = ("password=", "token=", "secret=")
     serialized = repr(data).lower()
     if any(fragment in serialized for fragment in forbidden_fragments):

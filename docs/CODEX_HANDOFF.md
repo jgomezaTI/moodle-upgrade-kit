@@ -8,7 +8,7 @@ Read this after `AGENTS.md` and before making changes.
 
 ## Current goal
 
-The deterministic read-only critical path and the Spec Kit-style agent layer are implemented. Keep the real Enaex target blocked until its environment owners resolve the recorded platform, Git, backup and command prerequisites.
+The deterministic critical path, Spec Kit-style agent layer, autonomous guarded runner and Codex `/upgrade-moodle` entry point are implemented. Keep the real Enaex target blocked until its environment owners resolve the recorded platform, Git, backup and command prerequisites.
 
 Do not enable mutation or infer operational commands.
 
@@ -64,8 +64,10 @@ inventory before
 → upgrade
 → inventory/endpoints/logs/database after
 → validate
+→ functional QA
 → human acceptance gate
 → document
+→ optional verified external documentation sync
 ```
 
 Rollback is also implemented as an explicit, separately gated path.
@@ -354,19 +356,20 @@ No `muk upgrade` command or configured upgrade command sequence was executed. A 
 
 ## Agent layer — implemented
 
-Seven portable contracts are registered under `agents/`:
+Eight portable contracts are registered under `agents/`:
 
 ```text
 upgrade-orchestrator
 discovery-agent
 compatibility-agent
 baseline-agent
+qa-agent
 upgrade-agent
 rollback-agent
 documentation-agent
 ```
 
-All 12 deterministic capabilities have one owner. `upgrade-orchestrator` is delegate-only and owns no capability; only `upgrade-agent` owns `moodle.upgrade`, and only `rollback-agent` owns `moodle.rollback`. `muk orchestrate` writes `agent-state.json` and never auto-executes its selected action.
+Every registered capability has one owner. `upgrade-orchestrator` is delegate-only and owns no capability; only `upgrade-agent` owns `moodle.upgrade`, and only `rollback-agent` owns `moodle.rollback`. `muk orchestrate` writes one decision to `agent-state.json`; `muk run-agents` executes successive permitted deterministic decisions and stops at blockers, human gates and external adapters.
 
 The real Enaex agent-state validation returns `blocked` with the existing four machine blockers plus five missing environment-owned upgrade-command findings. No upgrade or rollback command was run.
 
@@ -398,6 +401,14 @@ Validation: 80 tests pass. The real read-only run `ENAEX-CONFIGURED-CODE-REVIEW-
 The framework agent layer is complete. The exact next critical-path work belongs to the real environment: its owners must resolve PHP compatibility, establish the required clean Git state, configure and verify real backup conventions, and declare the exact upgrade commands. Then rerun the read-only evidence and orchestrator before any mutation is considered.
 
 Do not change PHP merely to make compatibility green and do not run a real upgrade or rollback.
+
+## Autonomous chat entry point
+
+Framework `0.3.0` packages `plugins/moodle-upgrade-kit` and the `/upgrade-moodle` Codex command. The associated skill runs or resumes `muk run-agents`, inspects the configured-code queue, coordinates controlled functional QA, requires explicit mutation/acceptance gates and verifies configured Google Drive documentation through the active connector.
+
+QA is now a required post-validation/pre-acceptance artifact. Optional Drive publication becomes part of completion only when `documentation.provider` and `require_sync: true` are configured. Both external results must be recorded through `muk record-qa` or `muk record-document-sync`; neither may be hand-claimed from an exit code.
+
+Canonical validation for `0.3.0`: 98 tests pass. A read-only autonomous pass against the existing real V2 run preserved `safety.allow_mutation: false` and stopped on the already known PHP, Git, backup, mutation and exact-command blockers without executing upgrade or rollback.
 
 ## Safety invariants
 

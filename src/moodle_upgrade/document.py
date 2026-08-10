@@ -16,9 +16,9 @@ class Finding:
 
 
 EVIDENCE_FILES = [
-    "inventory-before.json", "inventory.json", "compatibility.json", "plugins.json", "baseline-before.json",
+    "inventory-before.json", "inventory.json", "compatibility.json", "plugins.json", "code-review.json", "baseline-before.json",
     "backup.json", "upgrade-result.json", "inventory-after.json", "endpoints-after.json", "logs-after.json",
-    "database-after.json", "validation.json", "rollback-result.json",
+    "database-after.json", "validation.json", "qa-result.json", "rollback-result.json",
 ]
 
 
